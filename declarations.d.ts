@@ -161,7 +161,6 @@ interface IFileSystem {
 	 */
 	renameIfExists(oldPath: string, newPath: string): IFuture<boolean>
 	getFsStats(path: string): IFuture<IFsStats>;
-	getLsStats(path: string): IFuture<IFsStats>;
 	symlink(sourcePath: string, destinationPath: string, type: "file"): IFuture<void>;
 	symlink(sourcePath: string, destinationPath: string, type: "dir"): IFuture<void>;
 	symlink(sourcePath: string, destinationPath: string, type: "junction"): IFuture<void>;
