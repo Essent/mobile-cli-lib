@@ -249,7 +249,6 @@ export class FileSystem implements IFileSystem {
 		return fs.statSync(path);
 	}
 
-
 	public getLsStats(path: string): fs.Stats {
 		return fs.lstatSync(path);
 	}
