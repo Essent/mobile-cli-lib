@@ -27,6 +27,7 @@ declare module Project {
 		PROJECT_IGNORE_FILE: string;
 		BUILD_RESULT_DISPOSITION: string;
 		REFERENCES_FILE_NAME: string;
+		OLD_REFERENCES_FILE_NAME: string;
 		RELEASE_CONFIGURATION_NAME: string;
 		RELEASE_PROJECT_FILE_NAME: string;
 		ANDROID_PLATFORM_NAME: string;
@@ -86,7 +87,13 @@ declare module Project {
 
 	interface IProjectBase {
 		projectDir: string;
-		getProjectDir(): IFuture<string>;
+
+		/**
+		 * Determines path to project dir.
+		 * @returns {string} Path to project directory.
+		 */
+		getProjectDir(): string;
+
 		projectData: IData;
 		/**
 		 * Describes whether the project has separate debug/release build configurations.

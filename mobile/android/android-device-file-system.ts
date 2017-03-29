@@ -23,24 +23,43 @@ export class AndroidDeviceFileSystem implements Mobile.IDeviceFileSystem {
 		return this.adb.executeShellCommand(listCommandArgs);
 	}
 
-	public getFile(deviceFilePath: string): IFuture<void> {
-		return Future.fromResult();
-	}
+	public getFile(deviceFilePath: string, appIdentifier: string, outputPath?: string): IFuture<void> {
+		return (() => {
+			let stdout = !outputPath;
+			if (stdout) {
+				temp.track();
+				outputPath = temp.path({prefix: "sync", suffix: ".tmp"});
+			}
+			this.adb.executeCommand(["pull", deviceFilePath, outputPath]).wait();
+			if (stdout) {
+				let readStream = this.$fs.createReadStream(outputPath);
+				let future = new Future<void>();
+				readStream.pipe(process.stdout);
+				readStream.on("end", () => {
+					future.return();
+				});
+				readStream.on("error", (err: Error) => {
+					future.throw(err);
+				});
+				future.wait();
+			}
+		}).future<void>()();
+ 	}
 
-	public putFile(localFilePath: string, deviceFilePath: string): IFuture<void> {
-		return Future.fromResult();
+	public putFile(localFilePath: string, deviceFilePath: string, appIdentifier: string): IFuture<void> {
+		return this.adb.executeCommand(["push", localFilePath, deviceFilePath]);
 	}
 
 	public transferFiles(deviceAppData: Mobile.IDeviceAppData, localToDevicePaths: Mobile.ILocalToDevicePathData[]): IFuture<void> {
 		return (() => {
 			_(localToDevicePaths)
-				.filter(localToDevicePathData => this.$fs.getFsStats(localToDevicePathData.getLocalPath()).wait().isFile())
+				.filter(localToDevicePathData => this.$fs.getFsStats(localToDevicePathData.getLocalPath()).isFile())
 				.each(localToDevicePathData =>
 					this.adb.executeCommand(["push", localToDevicePathData.getLocalPath(), localToDevicePathData.getDevicePath()]).wait()
 				);
 
 			_(localToDevicePaths)
-				.filter(localToDevicePathData => this.$fs.getFsStats(localToDevicePathData.getLocalPath()).wait().isDirectory())
+				.filter(localToDevicePathData => this.$fs.getFsStats(localToDevicePathData.getLocalPath()).isDirectory())
 				.each(localToDevicePathData =>
 					this.adb.executeShellCommand(["chmod", "0777", localToDevicePathData.getDevicePath()]).wait()
 				);
@@ -60,7 +79,7 @@ export class AndroidDeviceFileSystem implements Mobile.IDeviceFileSystem {
 
 			localToDevicePaths.forEach(localToDevicePathData => {
 				let localPath = localToDevicePathData.getLocalPath();
-				let stats = this.$fs.getFsStats(localPath).wait();
+				let stats = this.$fs.getFsStats(localPath);
 				if (stats.isFile()) {
 					let fileShasum = this.$fs.getFileShasum(localPath).wait();
 					currentShasums[localPath] = fileShasum;
@@ -106,7 +125,7 @@ export class AndroidDeviceFileSystem implements Mobile.IDeviceFileSystem {
 	public transferFile(localPath: string, devicePath: string): IFuture<void> {
 		return (() => {
 			this.$logger.trace(`Transfering ${localPath} to ${devicePath}`);
-			let stats = this.$fs.getFsStats(localPath).wait();
+			let stats = this.$fs.getFsStats(localPath);
 			if (stats.isDirectory()) {
 				this.adb.executeShellCommand(["mkdir", path.dirname(devicePath)]).wait();
 			} else {
@@ -119,7 +138,7 @@ export class AndroidDeviceFileSystem implements Mobile.IDeviceFileSystem {
 		return (() => {
 			let hostTmpDir = this.getTempDir();
 			let commandsFileHostPath = path.join(hostTmpDir, "temp.commands.file");
-			this.$fs.writeFile(commandsFileHostPath, fileContent).wait();
+			this.$fs.writeFile(commandsFileHostPath, fileContent);
 
 			// copy it to the device
 			this.transferFile(commandsFileHostPath, deviceFilePath).wait();

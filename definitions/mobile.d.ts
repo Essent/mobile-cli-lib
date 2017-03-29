@@ -286,8 +286,8 @@ declare module Mobile {
 
 	interface IDeviceFileSystem {
 		listFiles(devicePath: string, appIdentifier?: string): IFuture<any>;
-		getFile(deviceFilePath: string): IFuture<void>;
-		putFile(localFilePath: string, deviceFilePath: string): IFuture<void>;
+		getFile(deviceFilePath: string, appIdentifier: string, outputFilePath?: string): IFuture<void>;
+		putFile(localFilePath: string, deviceFilePath: string, appIdentifier: string): IFuture<void>;
 		deleteFile?(deviceFilePath: string, appIdentifier: string): void;
 		transferFiles(deviceAppData: Mobile.IDeviceAppData, localToDevicePaths: Mobile.ILocalToDevicePathData[]): IFuture<void>;
 		transferDirectory(deviceAppData: Mobile.IDeviceAppData, localToDevicePaths: Mobile.ILocalToDevicePathData[], projectFilesPath: string): IFuture<void>;
@@ -340,6 +340,7 @@ declare module Mobile {
 		getDevicesForPlatform(platform: string): Mobile.IDevice[];
 		getDeviceInstances(): Mobile.IDevice[];
 		getDeviceByDeviceOption(): Mobile.IDevice;
+		getDeviceByName(name: string): Mobile.IDevice;
 		isAndroidDevice(device: Mobile.IDevice): boolean;
 		isiOSDevice(device: Mobile.IDevice): boolean;
 		isiOSSimulator(device: Mobile.IDevice): boolean;
@@ -435,7 +436,7 @@ declare module Mobile {
 	}
 
 	interface IiTunesValidator {
-		getError(): IFuture<string>;
+		getError(): string;
 	}
 
 	interface IiOSCore {
@@ -527,6 +528,7 @@ declare module Mobile {
 
 	interface IHouseArrestClient {
 		getAfcClientForAppContainer(applicationIdentifier: string): Mobile.IAfcClient;
+		getAfcClientForAppDocuments(applicationIdentifier: string): Mobile.IAfcClient;
 		closeSocket(): void;
 	}
 
@@ -606,7 +608,14 @@ declare module Mobile {
 
 	interface IEmulatorPlatformServices {
 		checkDependencies(): IFuture<void>;
-		checkAvailability(dependsOnProject?: boolean): IFuture<void>;
+
+		/**
+		 * Checks if the current system can start emulator of the specified mobile platform and throws error in case it cannot.
+		 * @param {boolean} dependsOnProject Defines if the starting of emulator depends on the project configuration.
+		 * @returns void
+		 */
+		checkAvailability(dependsOnProject?: boolean): void;
+
 		startEmulator(): IFuture<string>;
 		runApplicationOnEmulator(app: string, emulatorOptions?: IEmulatorOptions): IFuture<any>;
 		getEmulatorId(): IFuture<string>;
@@ -614,6 +623,9 @@ declare module Mobile {
 
 	interface IAndroidEmulatorServices extends IEmulatorPlatformServices {
 		getAllRunningEmulators(): IFuture<string[]>;
+		pathToEmulatorExecutable: string;
+		getInfoFromAvd(avdName: string): Mobile.IAvdInfo;
+		getAvds(): string[];
 	}
 
 	interface IiSimDevice {
@@ -634,7 +646,12 @@ declare module Mobile {
 	}
 
 	interface IEmulatorSettingsService {
-		canStart(platform: string): IFuture<boolean>;
+		/**
+		 * Gives information if current project can be started in emulator.
+		 * @param {string} platform The mobile platform of the emulator (android, ios, wp8).
+		 * @returns {boolean} true in case the project can be started in emulator. In case not, the method will throw error.
+		 */
+		canStart(platform: string): boolean;
 		minVersion: number;
 	}
 

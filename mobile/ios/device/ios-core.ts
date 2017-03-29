@@ -13,7 +13,7 @@ import * as bplistParser from "bplist-parser";
 import * as string_decoder from "string_decoder";
 import * as stream from "stream";
 import * as assert from "assert";
-import {EOL} from "os";
+import { EOL } from "os";
 import * as fiberBootstrap from "../../../fiber-bootstrap";
 
 export class CoreTypes {
@@ -675,7 +675,13 @@ export class WinSocket implements Mobile.IiOSDeviceSocket {
 	public readSystemLogBlocking(): void {
 		let data = this.read(WinSocket.BYTES_TO_READ);
 		while (data) {
-			let output = ref.readCString(data, 0);
+			// On iOS 10 devices the device logs contain \n after each line.
+			// When we use readCString for buffers which contain many \0
+			// The method will return the content of the buffer only before the first \0 character.
+			// We need to replace the \0 with "" in order read the whole content.
+			const messageWithoutNullCharacters = data.toString().replace("\0", "");
+			const bufferWithoutNullCharacters = new Buffer(messageWithoutNullCharacters);
+			const output = ref.readCString(bufferWithoutNullCharacters, 0);
 			process.send(output);
 			data = this.read(WinSocket.BYTES_TO_READ);
 		}
@@ -881,7 +887,7 @@ class PosixSocket implements Mobile.IiOSDeviceSocket {
 		this.socket
 			.on("data", (data: NodeBuffer) => {
 				this.buffer = Buffer.concat([this.buffer, data]);
-				if (this.format === CoreTypes.kCFPropertyListBinaryFormat_v1_0) {
+
 					try {
 						while (this.buffer.length >= this.length) {
 							switch (this.state) {
@@ -893,12 +899,19 @@ class PosixSocket implements Mobile.IiOSDeviceSocket {
 								case ReadState.Plist:
 									try {
 										let plistBuffer = this.buffer.slice(0, this.length);
-										let message = bplistParser.parseBuffer(plistBuffer);
+										let message: any;
+										if (this.format === CoreTypes.kCFPropertyListBinaryFormat_v1_0) {
+											message = bplistParser.parseBuffer(plistBuffer);
+										} else if (this.format === CoreTypes.kCFPropertyListXMLFormat_v1_0) {
+											message = plist.parse(this.buffer.toString());
+										}
+
 										this.$logger.trace("MESSAGE RECEIVING");
 										this.$logger.trace(message);
 										try {
-											if (message && typeof (message) === "object" && message[0]) {
-												message = message[0];
+											message = _.isArray(message) && message[0] || message;
+
+											if (message && typeof (message) === "object") {
 												let output = "";
 												if (message.Status) {
 													output += util.format("Status: %s", message.Status);
@@ -953,18 +966,6 @@ class PosixSocket implements Mobile.IiOSDeviceSocket {
 					} catch (e) {
 						this.$logger.trace("Exception thrown: " + e);
 					}
-				} else if (this.format === CoreTypes.kCFPropertyListXMLFormat_v1_0) {
-					let parsedData: IDictionary<any> = {};
-					try {
-						parsedData = plist.parse(this.buffer.toString());
-					} catch (e) {
-						this.$logger.trace(`An error has occured: ${e.toString()}`);
-					}
-
-					if (!result.isResolved()) {
-						result.return(parsedData);
-					}
-				}
 			})
 			.on("error", (error: Error) => {
 				if (!result.isResolved()) {
@@ -1084,8 +1085,8 @@ class GDBStandardOutputAdapter extends stream.Transform {
 	private utf8StringDecoder = new string_decoder.StringDecoder("utf8");
 
 	constructor(private deviceIdentifier: string,
-				private $deviceLogProvider: Mobile.IDeviceLogProvider,
-				private $devicePlatformsConstants: Mobile.IDevicePlatformsConstants) {
+		private $deviceLogProvider: Mobile.IDeviceLogProvider,
+		private $devicePlatformsConstants: Mobile.IDevicePlatformsConstants) {
 		super();
 	}
 
@@ -1137,11 +1138,18 @@ class GDBSignalWatcher extends stream.Writable {
 
 	public _write(packet: any, encoding: string, callback: Function) {
 		try {
-			for (let i = 0; i < packet.length - 2; i++) {
-				if (packet[i] === getCharacterCodePoint("$") && (packet[i + 1] === getCharacterCodePoint("T") || packet[i + 1] === getCharacterCodePoint("S"))) {
-					// SIGKILL || SIGABRT
-					if (packet[i + 2] === getCharacterCodePoint("9") ||
-					    packet[i + 2] === getCharacterCodePoint("6")) {
+			const dollarCodePoint = getCharacterCodePoint("$");
+			const TCodePoint = getCharacterCodePoint("T");
+			const SCodePoint = getCharacterCodePoint("S");
+			// The reply packages take the following form (the space in the reply templates is included for clarity)
+			// ‘S AA’  or ‘T AA n1:r1;n2:r2;...’ meaning that the program received signal number AA (a two-digit hexadecimal number)
+			for (let i = 0; i < packet.length - 3; i++) {
+				if (packet[i] === dollarCodePoint && (packet[i + 1] === TCodePoint || packet[i + 1] === SCodePoint)) {
+					let signalHex = packet.toString("ascii", i + 2, i + 4);
+					let signalDecimal = parseInt(signalHex, 16);
+
+					// SIGTRAP || SIGABRT || SIGKILL || SIGSEGV || EXC_BAD_ACCESS
+					if (signalDecimal === 5 || signalDecimal === 6 || signalDecimal === 9 || signalDecimal === 11 || signalDecimal === 145) {
 						process.exit(1);
 					}
 				}

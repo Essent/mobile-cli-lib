@@ -1,9 +1,44 @@
-import * as uuid from "node-uuid";
+import * as uuid from "uuid";
 import * as Fiber from "fibers";
 import * as net from "net";
 let Table = require("cli-table");
 import Future = require("fibers/future");
-import { platform } from "os";
+import { platform, EOL } from "os";
+
+/**
+ * Executes all promises and does not stop in case any of them throws.
+ * Returns the results of all promises in array when all are successfully resolved.
+ * In case any of the promises is rejected, rejects the resulted promise with all accumulated errors.
+ * @param {Promise<T>[]} promises Promises to be resolved.
+ * @returns {Promise<T[]>} New promise which will be resolved with the results of all promises.
+ */
+export function settlePromises<T>(promises: Promise<T>[]): Promise<T[]> {
+	return new Promise((resolve, reject) => {
+		let settledPromisesCount = 0,
+			results: T[] = [],
+			errors: Error[] = [];
+
+		const length = promises.length;
+
+		_.forEach(promises, currentPromise => {
+			currentPromise
+				.then(result => {
+					results.push(result);
+				})
+				.catch(err => {
+					// Accumulate all errors.
+					errors.push(err);
+				})
+				.then(() => {
+					settledPromisesCount++;
+
+					if (settledPromisesCount === length) {
+						errors.length ? reject(new Error(`Multiple errors were thrown:${EOL}${errors.map(e => e.message || e).join(EOL)}`)) : resolve(results);
+					}
+				});
+		});
+	});
+}
 
 export function getPropertyName(func: Function): string {
 	if (func) {
@@ -40,8 +75,10 @@ export function quoteString(s: string): string {
 	return (platform() === "win32") ? cmdQuote(s) : bashQuote(s);
 }
 
-export function createGUID(useBraces: boolean = true) {
+export function createGUID(useBraces?: boolean) {
 	let output: string;
+
+	useBraces = useBraces === undefined ? true : useBraces;
 
 	if (useBraces) {
 		output = "{" + uuid.v4() + "}";
@@ -64,7 +101,8 @@ export function isResponseRedirect(response: Server.IRequestResponseData) {
 	return _.includes([301, 302, 303, 307, 308], response.statusCode);
 }
 
-export function formatListOfNames(names: string[], conjunction = "or"): string {
+export function formatListOfNames(names: string[], conjunction?: string): string {
+	conjunction = conjunction === undefined ? "or" : conjunction;
 	if (names.length <= 1) {
 		return names[0];
 	} else {
@@ -357,10 +395,12 @@ export function connectEventuallyUntilTimeout(factory: () => net.Socket, timeout
 //	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 //THE SOFTWARE.
 
-let FN_NAME_AND_ARGS = /^function\s*([^\(]*)\(\s*([^\)]*)\)/m;
-let FN_ARG_SPLIT = /,/;
-let FN_ARG = /^\s*(_?)(\S+?)\1\s*$/;
-let STRIP_COMMENTS = /((\/\/.*$)|(\/\*[\s\S]*?\*\/))/mg;
+const CLASS_NAME = /class\s+([A-Z].+?)(?:\s+.*?)?\{/;
+const CONSTRUCTOR_ARGS = /constructor\s*([^\(]*)\(\s*([^\)]*)\)/m;
+const FN_NAME_AND_ARGS = /^(?:function)?\s*([^\(]*)\(\s*([^\)]*)\)\s*(=>)?\s*\{/m;
+const FN_ARG_SPLIT = /,/;
+const FN_ARG = /^\s*(_?)(\S+?)\1\s*$/;
+const STRIP_COMMENTS = /((\/\/.*$)|(\/\*[\s\S]*?\*\/))/mg;
 
 export function annotate(fn: any) {
 	let $inject: any,
@@ -371,18 +411,28 @@ export function annotate(fn: any) {
 		if (!($inject = fn.$inject) || $inject.name !== fn.name) {
 			$inject = { args: [], name: "" };
 			fnText = fn.toString().replace(STRIP_COMMENTS, '');
-			argDecl = fnText.match(FN_NAME_AND_ARGS);
-			$inject.name = argDecl[1];
-			if (fn.length) {
+
+			let nameMatch = fnText.match(CLASS_NAME);
+
+			if (nameMatch) {
+				argDecl = fnText.match(CONSTRUCTOR_ARGS);
+			} else {
+				nameMatch = argDecl = fnText.match(FN_NAME_AND_ARGS);
+			}
+
+			$inject.name = nameMatch && nameMatch[1];
+
+			if (argDecl && fnText.length) {
 				argDecl[2].split(FN_ARG_SPLIT).forEach((arg) => {
 					arg.replace(FN_ARG, (all, underscore, name) => $inject.args.push(name));
 				});
 			}
+
 			fn.$inject = $inject;
 		}
 	}
+
 	return $inject;
 }
 
 //--- end part copied from AngularJS
-

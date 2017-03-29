@@ -12,12 +12,18 @@ export class IOSSimulatorFileSystem implements Mobile.IDeviceFileSystem {
 		return this.iosSim.listFiles(devicePath);
 	}
 
-	public getFile(deviceFilePath: string): IFuture<void> {
-		return this.iosSim.getFile(deviceFilePath);
+	public getFile(deviceFilePath: string, appIdentifier: string, outputFilePath?: string): IFuture<void> {
+		return (() => {
+			if (outputFilePath) {
+				shelljs.cp("-f", deviceFilePath, outputFilePath);
+			}
+		}).future<void>()();
 	}
 
-	public putFile(localFilePath: string, deviceFilePath: string): IFuture<void> {
-		return this.iosSim.putFile(localFilePath, deviceFilePath);
+	public putFile(localFilePath: string, deviceFilePath: string, appIdentifier: string): IFuture<void> {
+		return (() => {
+			shelljs.cp("-f", localFilePath, deviceFilePath);
+		}).future<void>()();
 	}
 
 	public deleteFile(deviceFilePath: string, appIdentifier: string): void {
@@ -39,9 +45,10 @@ export class IOSSimulatorFileSystem implements Mobile.IDeviceFileSystem {
 	public transferFile(localFilePath: string, deviceFilePath: string): IFuture<void> {
 		return (() => {
 			this.$logger.trace(`Transferring from ${localFilePath} to ${deviceFilePath}`);
-			if (this.$fs.getFsStats(localFilePath).wait().isDirectory()) {
+			if (this.$fs.getFsStats(localFilePath).isDirectory()) {
 				shelljs.mkdir(deviceFilePath);
 			} else {
+				this.$fs.ensureDirectoryExists(path.dirname(deviceFilePath));
 				shelljs.cp("-f", localFilePath, deviceFilePath);
 			}
 		}).future<void>()();

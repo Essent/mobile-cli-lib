@@ -78,15 +78,10 @@ export class AfcFile extends AfcBase implements Mobile.IAfcFile {
 	public read(len: number): any {
 		let readLengthRef = ref.alloc(iOSCore.CoreTypes.uintType, len);
 		let data = new Buffer(len * iOSCore.CoreTypes.pointerSize);
-		let result = this.tryExecuteAfcAction(() => {
-			data = new Buffer(len * iOSCore.CoreTypes.pointerSize);
-			this.$mobileDevice.afcFileRefRead(this.afcConnection, this.afcFile, data, readLengthRef);
-		});
-
-		if(result !== 0) {
+		let result = this.tryExecuteAfcAction(() =>	this.$mobileDevice.afcFileRefRead(this.afcConnection, this.afcFile, data, readLengthRef));
+		if (result !== 0) {
 			this.$errors.fail("Unable to read data from file '%s'. Result is: '%s'", this.afcFile, result);
 		}
-
 		let readLength = readLengthRef.deref();
 		return data.slice(0, readLength);
 	}
@@ -206,7 +201,7 @@ export class AfcClient extends AfcBase implements Mobile.IAfcClient {
 				this.deleteFile(devicePath);
 
 				let target = this.open(devicePath, "w");
-				let localFilePathSize = this.$fs.getFileSize(localFilePath).wait(),
+				let localFilePathSize = this.$fs.getFileSize(localFilePath),
 					futureThrow = (err: Error) => {
 						if (!future.isResolved()) {
 							future.throw(err);
@@ -478,6 +473,10 @@ export class HouseArrestClient implements Mobile.IHouseArrestClient {
 
 	public getAfcClientForAppContainer(applicationIdentifier: string): Mobile.IAfcClient {
 		return this.getAfcClientCore("VendContainer", applicationIdentifier);
+	}
+
+	public getAfcClientForAppDocuments(applicationIdentifier: string): Mobile.IAfcClient {
+		return this.getAfcClientCore("VendDocuments", applicationIdentifier);
 	}
 
 	public closeSocket() {

@@ -1,6 +1,6 @@
-import {Yok} from "../../../yok";
-import {assert} from "chai";
-import { CommonLoggerStub } from "../stubs";
+import { Yok } from "../../../yok";
+import { assert } from "chai";
+import { CommonLoggerStub, HooksServiceStub } from "../stubs";
 import { ApplicationManagerBase } from "../../../mobile/application-manager-base";
 import Future = require("fibers/future");
 
@@ -9,8 +9,8 @@ let currentlyAvailableAppsForDebugging: Mobile.IDeviceApplicationInformation[],
 	currentlyAvailableAppWebViewsForDebugging: IDictionary<Mobile.IDebugWebViewInfo[]>;
 
 class ApplicationManager extends ApplicationManagerBase {
-	constructor($logger: ILogger) {
-		super($logger);
+	constructor($logger: ILogger, $hooksService: IHooksService) {
+		super($logger, $hooksService);
 	}
 
 	public isLiveSyncSupported(appIdentifier: string): IFuture<boolean> {
@@ -57,6 +57,7 @@ class ApplicationManager extends ApplicationManagerBase {
 function createTestInjector(): IInjector {
 	let testInjector = new Yok();
 	testInjector.register("logger", CommonLoggerStub);
+	testInjector.register("hooksService", HooksServiceStub);
 	testInjector.register("applicationManager", ApplicationManager);
 	return testInjector;
 }
@@ -103,7 +104,7 @@ describe("ApplicationManagerBase", () => {
 
 	describe("checkForApplicationUpdates", () => {
 		describe("debuggableApps", () => {
-			it("emits debuggableAppFound when new application is available for debugging", (done) => {
+			it("emits debuggableAppFound when new application is available for debugging", (done: mocha.Done) => {
 				currentlyAvailableAppsForDebugging = createAppsAvailableForDebugging(2);
 				let foundAppsForDebug: Mobile.IDeviceApplicationInformation[] = [];
 
@@ -120,7 +121,7 @@ describe("ApplicationManagerBase", () => {
 				applicationManager.checkForApplicationUpdates().wait();
 			});
 
-			it("emits debuggableAppFound when new application is available for debugging (several calls)", (done) => {
+			it("emits debuggableAppFound when new application is available for debugging (several calls)", (done: mocha.Done) => {
 				currentlyAvailableAppsForDebugging = createAppsAvailableForDebugging(1);
 				let foundAppsForDebug: Mobile.IDeviceApplicationInformation[] = [],
 					isFinalCheck = false;
@@ -146,7 +147,7 @@ describe("ApplicationManagerBase", () => {
 				applicationManager.checkForApplicationUpdates().wait();
 			});
 
-			it("emits debuggableAppLost when application cannot be debugged anymore", (done) => {
+			it("emits debuggableAppLost when application cannot be debugged anymore", (done: mocha.Done) => {
 				currentlyAvailableAppsForDebugging = createAppsAvailableForDebugging(2);
 				let expectedAppsToBeLost = currentlyAvailableAppsForDebugging,
 					lostAppsForDebug: Mobile.IDeviceApplicationInformation[] = [];
@@ -170,7 +171,7 @@ describe("ApplicationManagerBase", () => {
 				applicationManager.checkForApplicationUpdates().wait();
 			});
 
-			it("emits debuggableAppLost when application cannot be debugged anymore (several calls)", (done) => {
+			it("emits debuggableAppLost when application cannot be debugged anymore (several calls)", (done: mocha.Done) => {
 				currentlyAvailableAppsForDebugging = createAppsAvailableForDebugging(4);
 				let lostAppsForDebug: Mobile.IDeviceApplicationInformation[] = [],
 					isFinalCheck = false,
@@ -233,7 +234,7 @@ describe("ApplicationManagerBase", () => {
 				Future.wait(futures);
 			});
 
-			it("emits debuggableViewFound when new views are available for debug", (done) => {
+			it("emits debuggableViewFound when new views are available for debug", (done: mocha.Done) => {
 				currentlyAvailableAppsForDebugging = createAppsAvailableForDebugging(2);
 				let numberOfViewsPerApp = 2;
 				currentlyAvailableAppWebViewsForDebugging = createDebuggableWebViews(currentlyAvailableAppsForDebugging, numberOfViewsPerApp);
@@ -258,7 +259,7 @@ describe("ApplicationManagerBase", () => {
 				applicationManager.checkForApplicationUpdates().wait();
 			});
 
-			it("emits debuggableViewLost when views for debug are removed", (done) => {
+			it("emits debuggableViewLost when views for debug are removed", (done: mocha.Done) => {
 				currentlyAvailableAppsForDebugging = createAppsAvailableForDebugging(2);
 				let numberOfViewsPerApp = 2;
 				currentlyAvailableAppWebViewsForDebugging = createDebuggableWebViews(currentlyAvailableAppsForDebugging, numberOfViewsPerApp);
@@ -289,7 +290,7 @@ describe("ApplicationManagerBase", () => {
 				applicationManager.checkForApplicationUpdates().wait();
 			});
 
-			it("emits debuggableViewFound when new views are available for debug", (done) => {
+			it("emits debuggableViewFound when new views are available for debug", (done: mocha.Done) => {
 				currentlyAvailableAppsForDebugging = createAppsAvailableForDebugging(2);
 				let numberOfViewsPerApp = 2;
 				currentlyAvailableAppWebViewsForDebugging = createDebuggableWebViews(currentlyAvailableAppsForDebugging, numberOfViewsPerApp);
@@ -324,7 +325,7 @@ describe("ApplicationManagerBase", () => {
 				applicationManager.checkForApplicationUpdates().wait();
 			});
 
-			it("emits debuggableViewLost when views for debug are not available anymore", (done) => {
+			it("emits debuggableViewLost when views for debug are not available anymore", (done: mocha.Done) => {
 				currentlyAvailableAppsForDebugging = createAppsAvailableForDebugging(2);
 				let numberOfViewsPerApp = 2;
 				currentlyAvailableAppWebViewsForDebugging = createDebuggableWebViews(currentlyAvailableAppsForDebugging, numberOfViewsPerApp);
@@ -356,7 +357,7 @@ describe("ApplicationManagerBase", () => {
 				applicationManager.checkForApplicationUpdates().wait();
 			});
 
-			it("emits debuggableViewChanged when view's property is modified (each one except id)", (done) => {
+			it("emits debuggableViewChanged when view's property is modified (each one except id)", (done: mocha.Done) => {
 				currentlyAvailableAppsForDebugging = createAppsAvailableForDebugging(1);
 				currentlyAvailableAppWebViewsForDebugging = createDebuggableWebViews(currentlyAvailableAppsForDebugging, 2);
 				let viewToChange = currentlyAvailableAppWebViewsForDebugging[currentlyAvailableAppsForDebugging[0].appIdentifier][0];
@@ -373,7 +374,7 @@ describe("ApplicationManagerBase", () => {
 				applicationManager.checkForApplicationUpdates().wait();
 			});
 
-			it("does not emit debuggableViewChanged when id is modified", (done) => {
+			it("does not emit debuggableViewChanged when id is modified", (done: mocha.Done) => {
 				currentlyAvailableAppsForDebugging = createAppsAvailableForDebugging(1);
 				currentlyAvailableAppWebViewsForDebugging = createDebuggableWebViews(currentlyAvailableAppsForDebugging, 2);
 				let viewToChange = currentlyAvailableAppWebViewsForDebugging[currentlyAvailableAppsForDebugging[0].appIdentifier][0];
@@ -512,7 +513,7 @@ describe("ApplicationManagerBase", () => {
 
 				while (currentlyInstalledApps.length) {
 					let currentlyRemovedApps = currentlyInstalledApps.splice(0, 2);
-					removedApps.push(...currentlyRemovedApps);
+					removedApps = removedApps.concat(currentlyRemovedApps);
 					testInstalledAppsResults();
 				}
 			});
@@ -570,11 +571,11 @@ describe("ApplicationManagerBase", () => {
 
 				for (let index = 10; index < 13; index++) {
 					let currentlyRemovedApps = currentlyInstalledApps.splice(0, 2);
-					removedApps.push(...currentlyRemovedApps);
+					removedApps = removedApps.concat(currentlyRemovedApps);
 
 					let currentlyAddedApps = [`app${index}`];
-					currentlyInstalledApps.push(...currentlyAddedApps);
-					installedApps.push(...currentlyAddedApps);
+					currentlyInstalledApps = currentlyInstalledApps.concat(currentlyAddedApps);
+					installedApps = installedApps.concat(currentlyAddedApps);
 
 					testInstalledAppsResults();
 				}

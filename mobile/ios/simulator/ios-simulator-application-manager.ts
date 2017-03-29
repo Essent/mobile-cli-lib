@@ -2,6 +2,7 @@ import {ApplicationManagerBase} from "../../application-manager-base";
 import Future = require("fibers/future");
 import * as path from "path";
 import * as temp from "temp";
+import { hook } from "../../../helpers";
 
 export class IOSSimulatorApplicationManager extends ApplicationManagerBase {
 	constructor(private iosSim: any,
@@ -11,21 +12,24 @@ export class IOSSimulatorApplicationManager extends ApplicationManagerBase {
 		private $bplistParser: IBinaryPlistParser,
 		private $iOSSimulatorLogProvider: Mobile.IiOSSimulatorLogProvider,
 		private $deviceLogProvider: Mobile.IDeviceLogProvider,
-		$logger: ILogger) {
-		super($logger);
+		$logger: ILogger,
+		$hooksService: IHooksService) {
+		super($logger, $hooksService);
 	}
 
 	public getInstalledApplications(): IFuture<string[]> {
 		return Future.fromResult(this.iosSim.getInstalledApplications(this.identifier));
 	}
 
+	// TODO: Remove IFuture, reason: readDirectory - cannot until android and iOS implementatios have async calls.
+	@hook('install')
 	public installApplication(packageFilePath: string): IFuture<void> {
 		return (() => {
-			if (this.$fs.exists(packageFilePath).wait() && path.extname(packageFilePath) === ".zip") {
+			if (this.$fs.exists(packageFilePath) && path.extname(packageFilePath) === ".zip") {
 				temp.track();
 				let dir = temp.mkdirSync("simulatorPackage");
 				this.$fs.unzip(packageFilePath, dir).wait();
-				let app = _.find(this.$fs.readDirectory(dir).wait(), directory => path.extname(directory) === ".app");
+				let app = _.find(this.$fs.readDirectory(dir), directory => path.extname(directory) === ".app");
 				if (app) {
 					packageFilePath = path.join(dir, app);
 				}
@@ -97,7 +101,7 @@ export class IOSSimulatorApplicationManager extends ApplicationManagerBase {
 			let applicationPath = this.iosSim.getApplicationPath(this.identifier, appIdentifier),
 				pathToInfoPlist = path.join(applicationPath, "Info.plist");
 
-			return this.$fs.exists(pathToInfoPlist).wait() ? this.$bplistParser.parseFile(pathToInfoPlist).wait()[0] : null;
+			return this.$fs.exists(pathToInfoPlist) ? this.$bplistParser.parseFile(pathToInfoPlist).wait()[0] : null;
 		}).future<any>()();
 	}
 

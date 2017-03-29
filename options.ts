@@ -32,7 +32,7 @@ export class OptionsBase {
 		private $errors: IErrors,
 		private $staticConfig: Config.IStaticConfig) {
 
-		_.extend(this.options, this.commonOptions, this.globalOptions);
+		this.options = _.extend({}, this.commonOptions, this.options, this.globalOptions);
 		this.setArgv();
 	}
 
@@ -61,7 +61,6 @@ export class OptionsBase {
 			geny: { type: OptionType.String },
 			debugBrk: { type: OptionType.Boolean },
 			debugPort: { type: OptionType.Number },
-			getPort: { type: OptionType.Boolean },
 			start: { type: OptionType.Boolean },
 			stop: { type: OptionType.Boolean },
 			ddi: { type: OptionType.String }, // the path to developer  disk image

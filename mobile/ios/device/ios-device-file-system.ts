@@ -2,6 +2,7 @@ import * as iOSProxyServices from "./ios-proxy-services";
 import * as path from "path";
 import * as ref from "ref";
 import * as util from "util";
+import Future = require("fibers/future");
 
 export class IOSDeviceFileSystem implements Mobile.IDeviceFileSystem {
 	constructor(private device: Mobile.IiOSDevice,
@@ -42,14 +43,22 @@ export class IOSDeviceFileSystem implements Mobile.IDeviceFileSystem {
 		}).future<any>()();
 	}
 
-	public getFile(deviceFilePath: string): IFuture<void> {
-		return (() => {
-			let afcClient = this.resolveAfc();
+	public getFile(deviceFilePath: string, appIdentifier: string, outputFilePath?: string,): IFuture<void> {
+		let future = new Future<void>();
+		let houseArrestClient: Mobile.IHouseArrestClient;
+		try {
+			houseArrestClient = this.$injector.resolve(iOSProxyServices.HouseArrestClient, {device: this.device});
+			let afcClient = this.getAfcClient(houseArrestClient, deviceFilePath, appIdentifier);
 			let fileToRead = afcClient.open(deviceFilePath, "r");
-			let fileToWrite = this.$options.file ? this.$fs.createWriteStream(this.$options.file) : process.stdout;
+			let fileToWrite = outputFilePath ? this.$fs.createWriteStream(outputFilePath) : process.stdout;
+			if (outputFilePath) {
+				fileToWrite.on("close", () => {
+					houseArrestClient.closeSocket();
+					future.return();
+				});
+			}
 			let dataSizeToRead = 8192;
 			let size = 0;
-
 			while(true) {
 				let data = fileToRead.read(dataSizeToRead);
 				if(!data || data.length === 0) {
@@ -58,33 +67,45 @@ export class IOSDeviceFileSystem implements Mobile.IDeviceFileSystem {
 				fileToWrite.write(data);
 				size += data.length;
 			}
-
 			fileToRead.close();
+			if (outputFilePath) {
+				fileToWrite.end();
+			}
 			this.$logger.trace("%s bytes read from %s", size.toString(), deviceFilePath);
-
-		}).future<void>()();
+		} catch(err) {
+			if (houseArrestClient) {
+				houseArrestClient.closeSocket();
+			}
+			this.$logger.trace("Error while getting file from device", err);
+			future.throw(err);
+		}
+		return future;
 	}
 
-	public putFile(localFilePath: string, deviceFilePath: string): IFuture<void> {
-		let afcClient = this.resolveAfc();
-		return afcClient.transfer(path.resolve(localFilePath), deviceFilePath);
+	public putFile(localFilePath: string, deviceFilePath: string, appIdentifier: string): IFuture<void> {
+		return (() => {
+			let houseArrestClient: Mobile.IHouseArrestClient = this.$injector.resolve(iOSProxyServices.HouseArrestClient, {device: this.device});
+			let afcClient = this.getAfcClient(houseArrestClient, deviceFilePath, appIdentifier);
+			afcClient.transfer(path.resolve(localFilePath), deviceFilePath).wait();
+			houseArrestClient.closeSocket();
+		}).future<void>()();
 	}
 
 	public deleteFile(deviceFilePath: string, appIdentifier: string): void {
 		let houseArrestClient: Mobile.IHouseArrestClient = this.$injector.resolve(iOSProxyServices.HouseArrestClient, {device: this.device});
-		let afcClientForContainer = houseArrestClient.getAfcClientForAppContainer(appIdentifier);
-		afcClientForContainer.deleteFile(deviceFilePath);
+		let afcClient = this.getAfcClient(houseArrestClient, deviceFilePath, appIdentifier);
+		afcClient.deleteFile(deviceFilePath);
 		houseArrestClient.closeSocket();
 	}
 
 	public transferFiles(deviceAppData: Mobile.IDeviceAppData, localToDevicePaths: Mobile.ILocalToDevicePathData[]): IFuture<void> {
 		return (() => {
 			let houseArrestClient: Mobile.IHouseArrestClient = this.$injector.resolve(iOSProxyServices.HouseArrestClient, { device: this.device });
-			let afcClientForAppContainer = houseArrestClient.getAfcClientForAppContainer(deviceAppData.appIdentifier);
+			let afcClient = this.getAfcClient(houseArrestClient, deviceAppData.deviceProjectRootPath, deviceAppData.appIdentifier);
 			_.each(localToDevicePaths, (localToDevicePathData) => {
-				let stats = this.$fs.getFsStats(localToDevicePathData.getLocalPath()).wait();
+				let stats = this.$fs.getFsStats(localToDevicePathData.getLocalPath());
 				if(stats.isFile()) {
-					afcClientForAppContainer.transfer(localToDevicePathData.getLocalPath(), localToDevicePathData.getDevicePath()).wait();
+					afcClient.transfer(localToDevicePathData.getLocalPath(), localToDevicePathData.getDevicePath()).wait();
 				}
 			});
 			houseArrestClient.closeSocket();
@@ -93,6 +114,14 @@ export class IOSDeviceFileSystem implements Mobile.IDeviceFileSystem {
 
 	public transferDirectory(deviceAppData: Mobile.IDeviceAppData, localToDevicePaths: Mobile.ILocalToDevicePathData[], projectFilesPath: string): IFuture<void> {
 		return this.transferFiles(deviceAppData, localToDevicePaths);
+	}
+
+	private getAfcClient(houseArrestClient: Mobile.IHouseArrestClient, rootPath: string, appIdentifier: string): Mobile.IAfcClient {
+		if (rootPath.indexOf("/Documents/") === 0) {
+			return houseArrestClient.getAfcClientForAppDocuments(appIdentifier);
+		}
+
+		return houseArrestClient.getAfcClientForAppContainer(appIdentifier);
 	}
 
 	private resolveAfc(): Mobile.IAfcClient {
