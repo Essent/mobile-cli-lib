@@ -1,14 +1,83 @@
-import * as uuid from "node-uuid";
-import * as Fiber from "fibers";
+import * as uuid from "uuid";
 import * as net from "net";
 let Table = require("cli-table");
-import Future = require("fibers/future");
-import { platform } from "os";
+import { platform, EOL } from "os";
+import { ReadStream } from "tty";
+
+export function deferPromise<T>(): IDeferPromise<T> {
+	let resolve: (value?: T | PromiseLike<T>) => void;
+	let reject: (reason?: any) => void;
+	let isResolved = false;
+	let isRejected = false;
+	let promise: Promise<T>;
+
+	promise = new Promise<T>((innerResolve, innerReject) => {
+		resolve = (value?: T | PromiseLike<T>) => {
+			isResolved = true;
+
+			return innerResolve(value);
+		};
+
+		reject = (reason?: any) => {
+			isRejected = true;
+
+			return innerReject(reason);
+		};
+	});
+
+	return {
+		promise,
+		resolve,
+		reject,
+		isResolved: () => isResolved,
+		isRejected: () => isRejected,
+		isPending: () => !isResolved && !isRejected
+	};
+};
+
+/**
+ * Executes all promises and does not stop in case any of them throws.
+ * Returns the results of all promises in array when all are successfully resolved.
+ * In case any of the promises is rejected, rejects the resulted promise with all accumulated errors.
+ * @param {Promise<T>[]} promises Promises to be resolved.
+ * @returns {Promise<T[]>} New promise which will be resolved with the results of all promises.
+ */
+export function settlePromises<T>(promises: Promise<T>[]): Promise<T[]> {
+	return new Promise((resolve, reject) => {
+		let settledPromisesCount = 0,
+			results: T[] = [],
+			errors: Error[] = [];
+
+		const length = promises.length;
+
+		if (!promises.length) {
+			resolve();
+		}
+
+		_.forEach(promises, currentPromise => {
+			currentPromise
+				.then(result => {
+					results.push(result);
+				})
+				.catch(err => {
+					// Accumulate all errors.
+					errors.push(err);
+				})
+				.then(() => {
+					settledPromisesCount++;
+
+					if (settledPromisesCount === length) {
+						errors.length ? reject(new Error(`Multiple errors were thrown:${EOL}${errors.map(e => e.message || e).join(EOL)}`)) : resolve(results);
+					}
+				});
+		});
+	});
+}
 
 export function getPropertyName(func: Function): string {
 	if (func) {
 		let match = func.toString().match(/(?:return\s+?.*\.(.+);)|(?:=>\s*?.*\.(.+)\b)/);
-		if(match) {
+		if (match) {
 			return (match[1] || match[2]).trim();
 		}
 	}
@@ -40,8 +109,10 @@ export function quoteString(s: string): string {
 	return (platform() === "win32") ? cmdQuote(s) : bashQuote(s);
 }
 
-export function createGUID(useBraces: boolean = true) {
+export function createGUID(useBraces?: boolean) {
 	let output: string;
+
+	useBraces = useBraces === undefined ? true : useBraces;
 
 	if (useBraces) {
 		output = "{" + uuid.v4() + "}";
@@ -52,8 +123,8 @@ export function createGUID(useBraces: boolean = true) {
 	return output;
 }
 
-export function stringReplaceAll(string: string, find: any, replace: string): string {
-	return string.split(find).join(replace);
+export function stringReplaceAll(inputString: string, find: any, replace: string): string {
+	return inputString.split(find).join(replace);
 }
 
 export function isRequestSuccessful(request: Server.IRequestResponseData) {
@@ -64,7 +135,8 @@ export function isResponseRedirect(response: Server.IRequestResponseData) {
 	return _.includes([301, 302, 303, 307, 308], response.statusCode);
 }
 
-export function formatListOfNames(names: string[], conjunction = "or"): string {
+export function formatListOfNames(names: string[], conjunction?: string): string {
+	conjunction = conjunction === undefined ? "or" : conjunction;
 	if (names.length <= 1) {
 		return names[0];
 	} else {
@@ -119,11 +191,11 @@ export function toBoolean(str: any): boolean {
 
 export function block(operation: () => void): void {
 	if (isInteractive()) {
-		process.stdin.setRawMode(false);
+		(<ReadStream>process.stdin).setRawMode(false);
 	}
 	operation();
 	if (isInteractive()) {
-		process.stdin.setRawMode(true);
+		(<ReadStream>process.stdin).setRawMode(true);
 	}
 }
 
@@ -148,10 +220,10 @@ export function getCurrentEpochTime(): number {
 	return dateTime.getTime();
 }
 
-export function sleep(ms: number): void {
-	let fiber = Fiber.current;
-	setTimeout(() => fiber.run(), ms);
-	Fiber.yield();
+export async function sleep(ms: number): Promise<void> {
+	return new Promise<void>((resolve, reject) => {
+		setTimeout(async () => resolve(), ms);
+	});
 }
 
 export function createTable(headers: string[], data: string[][]): any {
@@ -187,10 +259,10 @@ export function trimSymbol(str: string, symbol: string) {
 }
 
 // TODO: Use generic for predicatе predicate: (element: T|T[]) when TypeScript support this.
-export function getFuturesResults<T>(futures: IFuture<T | T[]>[], predicate: (element: any) => boolean): T[] {
-	Future.wait(futures);
-	return _(futures)
-		.map(f => f.get())
+export async function getFuturesResults<T>(promises: Promise<T | T[]>[], predicate: (element: any) => boolean): Promise<T[]> {
+	const results = await Promise.all(promises);
+
+	return _(results)
 		.filter(predicate)
 		.flatten<T>()
 		.value();
@@ -205,17 +277,18 @@ export function appendZeroesToVersion(version: string, requiredVersionLength: nu
 	return version;
 }
 
-export function decorateMethod(before: (method1: any, self1: any, args1: any[]) => void, after: (method2: any, self2: any, result2: any, args2: any[]) => any) {
+export function decorateMethod(before: (method1: any, self1: any, args1: any[]) => Promise<void>, after: (method2: any, self2: any, result2: any, args2: any[]) => Promise<any>) {
 	return (target: Object, propertyKey: string, descriptor: TypedPropertyDescriptor<Function>) => {
 		let sink = descriptor.value;
-		descriptor.value = function (...args: any[]): any {
+		descriptor.value = async function (...args: any[]): Promise<any> {
 			if (before) {
-				before(sink, this, args);
+				await before(sink, this, args);
 			}
 			let result = sink.apply(this, args);
 			if (after) {
-				return after(sink, this, result, args);
+				return await after(sink, this, result, args);
 			}
+
 			return result;
 		};
 	};
@@ -248,41 +321,20 @@ export function hook(commandName: string) {
 	}
 
 	return decorateMethod(
-		(method: any, self: any, args: any[]) => {
+		async (method: any, self: any, args: any[]) => {
 			let hooksService = getHooksService(self);
-			hooksService.executeBeforeHooks(commandName, prepareArguments(method, args, hooksService)).wait();
+			await hooksService.executeBeforeHooks(commandName, prepareArguments(method, args, hooksService));
 		},
-		(method: any, self: any, resultPromise: any, args: any[]) => {
-			let result = resultPromise.wait();
+		async (method: any, self: any, resultPromise: any, args: any[]) => {
+			let result = await resultPromise;
 			let hooksService = getHooksService(self);
-			hooksService.executeAfterHooks(commandName, prepareArguments(method, args, hooksService)).wait();
-			return Future.fromResult(result);
+			await hooksService.executeAfterHooks(commandName, prepareArguments(method, args, hooksService));
+			return Promise.resolve(result);
 		});
 }
 
-export function isFuture(candidateFuture: any): boolean {
-	return !!(candidateFuture && typeof (candidateFuture.wait) === "function");
-}
-
-export function whenAny<T>(...futures: IFuture<T>[]): IFuture<IFuture<T>> {
-	let resultFuture = new Future<IFuture<T>>();
-	let futuresLeft = futures.length;
-
-	_.each(futures, future => {
-		future.resolve((error, result?) => {
-			futuresLeft--;
-
-			if (!resultFuture.isResolved()) {
-				if (typeof error === "undefined") {
-					resultFuture.return(future);
-				} else if (futuresLeft === 0) {
-					resultFuture.throw(new Error("None of the futures succeeded."));
-				}
-			}
-		});
-	});
-
-	return resultFuture;
+export function isPromise(candidateFuture: any): boolean {
+	return !!(candidateFuture && typeof (candidateFuture.then) === "function");
 }
 
 export function connectEventually(factory: () => net.Socket, handler: (_socket: net.Socket) => void): void {
@@ -300,37 +352,40 @@ export function connectEventually(factory: () => net.Socket, handler: (_socket: 
 	tryConnect();
 }
 
-export function connectEventuallyUntilTimeout(factory: () => net.Socket, timeout: number): IFuture<net.Socket> {
-	let future = new Future<net.Socket>();
-	let lastKnownError: Error;
+export async function connectEventuallyUntilTimeout(factory: () => net.Socket, timeout: number): Promise<net.Socket> {
+	return new Promise<net.Socket>((resolve, reject) => {
+		let lastKnownError: Error;
+		let isResolved = false;
 
-	setTimeout(function () {
-		if (!future.isResolved()) {
-			future.throw(lastKnownError);
-		}
-	}, timeout);
-
-	function tryConnect() {
-		let tryConnectAfterTimeout = (error: Error) => {
-			if (future.isResolved()) {
-				return;
+		setTimeout(function () {
+			if (!isResolved) {
+				isResolved = true;
+				reject(lastKnownError);
 			}
+		}, timeout);
 
-			lastKnownError = error;
-			setTimeout(tryConnect, 1000);
-		};
+		function tryConnect() {
+			let tryConnectAfterTimeout = (error: Error) => {
+				if (isResolved) {
+					return;
+				}
 
-		let socket = factory();
-		socket.on("connect", () => {
-			socket.removeListener("error", tryConnectAfterTimeout);
-			future.return(socket);
-		});
-		socket.on("error", tryConnectAfterTimeout);
-	}
+				lastKnownError = error;
+				setTimeout(tryConnect, 1000);
+			};
 
-	tryConnect();
+			let socket = factory();
+			socket.on("connect", () => {
+				socket.removeListener("error", tryConnectAfterTimeout);
+				isResolved = true;
+				resolve(socket);
+			});
+			socket.on("error", tryConnectAfterTimeout);
+		}
 
-	return future;
+		tryConnect();
+
+	});
 }
 
 //--- begin part copied from AngularJS
@@ -357,10 +412,12 @@ export function connectEventuallyUntilTimeout(factory: () => net.Socket, timeout
 //	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 //THE SOFTWARE.
 
-let FN_NAME_AND_ARGS = /^function\s*([^\(]*)\(\s*([^\)]*)\)/m;
-let FN_ARG_SPLIT = /,/;
-let FN_ARG = /^\s*(_?)(\S+?)\1\s*$/;
-let STRIP_COMMENTS = /((\/\/.*$)|(\/\*[\s\S]*?\*\/))/mg;
+const CLASS_NAME = /class\s+([A-Z].+?)(?:\s+.*?)?\{/;
+const CONSTRUCTOR_ARGS = /constructor\s*([^\(]*)\(\s*([^\)]*)\)/m;
+const FN_NAME_AND_ARGS = /^(?:function)?\s*([^\(]*)\(\s*([^\)]*)\)\s*(=>)?\s*[{_]/m;
+const FN_ARG_SPLIT = /,/;
+const FN_ARG = /^\s*(_?)(\S+?)\1\s*$/;
+const STRIP_COMMENTS = /((\/\/.*$)|(\/\*[\s\S]*?\*\/))/mg;
 
 export function annotate(fn: any) {
 	let $inject: any,
@@ -371,16 +428,27 @@ export function annotate(fn: any) {
 		if (!($inject = fn.$inject) || $inject.name !== fn.name) {
 			$inject = { args: [], name: "" };
 			fnText = fn.toString().replace(STRIP_COMMENTS, '');
-			argDecl = fnText.match(FN_NAME_AND_ARGS);
-			$inject.name = argDecl[1];
-			if (fn.length) {
+
+			let nameMatch = fnText.match(CLASS_NAME);
+
+			if (nameMatch) {
+				argDecl = fnText.match(CONSTRUCTOR_ARGS);
+			} else {
+				nameMatch = argDecl = fnText.match(FN_NAME_AND_ARGS);
+			}
+
+			$inject.name = nameMatch && nameMatch[1];
+
+			if (argDecl && fnText.length) {
 				argDecl[2].split(FN_ARG_SPLIT).forEach((arg) => {
 					arg.replace(FN_ARG, (all, underscore, name) => $inject.args.push(name));
 				});
 			}
+
 			fn.$inject = $inject;
 		}
 	}
+
 	return $inject;
 }
 

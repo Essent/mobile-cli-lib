@@ -1,9 +1,11 @@
 import * as helpers from "../../helpers";
-import {assert} from "chai";
+import { assert } from "chai";
+import { EOL } from "os";
 
 interface ITestData {
 	input: any;
 	expectedResult: any;
+	expectedError?: any;
 }
 
 describe("helpers", () => {
@@ -292,6 +294,88 @@ describe("helpers", () => {
 		it("returns false when Object.create(null) is passed", () => {
 			let actualResult = helpers.isNullOrWhitespace(Object.create(null));
 			assert.deepEqual(actualResult, false);
+		});
+	});
+
+	describe("settlePromises<T>", () => {
+		const getErrorMessage = (messages: any[]): string => {
+			return `Multiple errors were thrown:${EOL}${messages.join(EOL)}`;
+		};
+
+		const getRejectedPromise = (errorMessage: any): Promise<any> => {
+			let promise = Promise.reject(errorMessage);
+			promise.catch(() => {
+				// the handler is here in order to prevent warnings in Node 7+
+				// PromiseRejectionHandledWarning: Promise rejection was handled asynchronously
+				// Check the link for more details: https://stackoverflow.com/questions/40920179/should-i-refrain-from-handling-promise-rejection-asynchronously/40921505
+			});
+
+			return promise;
+		};
+
+		const settlePromisesTestData: ITestData[] = [
+			{
+				input: [Promise.resolve(1)],
+				expectedResult: [1]
+			},
+			{
+				input: [Promise.resolve(1), Promise.resolve(2)],
+				expectedResult: [1, 2]
+			},
+			{
+				input: [Promise.resolve(1), Promise.resolve(2), Promise.resolve(3), Promise.resolve(4), Promise.resolve(5)],
+				expectedResult: [1, 2, 3, 4, 5]
+			},
+			{
+				input: [Promise.resolve(1), getRejectedPromise(2)],
+				expectedResult: null,
+				expectedError: getErrorMessage([2])
+			},
+			{
+				input: [getRejectedPromise(1), Promise.resolve(2)],
+				expectedResult: null,
+				expectedError: getErrorMessage([1])
+			},
+			{
+				input: [Promise.resolve(1), getRejectedPromise(2), Promise.resolve(3), getRejectedPromise(new Error("4"))],
+				expectedResult: null,
+				expectedError: getErrorMessage([2, 4])
+			}
+		];
+
+		_.each(settlePromisesTestData, (testData, inputNumber) => {
+			it(`returns correct data, test case ${inputNumber}`, (done: mocha.Done) => {
+				const invokeDoneCallback = () => done();
+				helpers.settlePromises<any>(testData.input)
+					.then(res => {
+						assert.deepEqual(res, testData.expectedResult);
+					}, err => {
+						assert.deepEqual(err.message, testData.expectedError);
+					})
+					.then(invokeDoneCallback, invokeDoneCallback);
+			});
+		});
+
+		it("executes all promises even when some of them are rejected", (done: mocha.Done) => {
+			let isPromiseSettled = false;
+
+			const testData: ITestData = {
+				input: [getRejectedPromise(1), Promise.resolve(2).then(() => isPromiseSettled = true)],
+				expectedResult: null,
+				expectedError: getErrorMessage([1])
+			};
+
+			helpers.settlePromises<any>(testData.input)
+				.then(res => {
+					assert.deepEqual(res, testData.expectedResult);
+				}, err => {
+					assert.deepEqual(err.message, testData.expectedError);
+				})
+				.then(() => {
+					assert.isTrue(isPromiseSettled, "When the first promise is rejected, the second one should still be executed.");
+					done();
+				})
+				.catch(done);
 		});
 	});
 });

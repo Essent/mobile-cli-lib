@@ -1,17 +1,23 @@
 export class PutFileCommand implements ICommand {
 	constructor(private $devicesService: Mobile.IDevicesService,
-				private $stringParameter: ICommandParameter,
-				private $options: ICommonOptions) { }
+		private $stringParameter: ICommandParameter,
+		private $options: ICommonOptions,
+		private $project: Project.IProjectBase,
+		private $errors: IErrors) { }
 
-	allowedParameters: ICommandParameter[] = [this.$stringParameter, this.$stringParameter];
+	allowedParameters: ICommandParameter[] = [this.$stringParameter, this.$stringParameter, this.$stringParameter];
 
-	public execute(args: string[]): IFuture<void> {
-		return (() => {
-			this.$devicesService.initialize({ deviceId: this.$options.device, skipInferPlatform: true }).wait();
+	public async execute(args: string[]): Promise<void> {
+		await this.$devicesService.initialize({ deviceId: this.$options.device, skipInferPlatform: true });
+		let appIdentifier = args[2];
 
-			let action = (device: Mobile.IDevice) =>  { return (() => device.fileSystem.putFile(args[0], args[1]).wait()).future<void>()(); };
-			this.$devicesService.execute(action).wait();
-		}).future<void>()();
+		if (!appIdentifier && !this.$project.projectData) {
+			this.$errors.failWithoutHelp("Please enter application identifier or execute this command in project.");
+		}
+
+		appIdentifier = appIdentifier || this.$project.projectData.AppIdentifier;
+		let action = (device: Mobile.IDevice) => device.fileSystem.putFile(args[0], args[1], appIdentifier);
+		await this.$devicesService.execute(action);
 	}
 }
-$injector.registerCommand("device|put-file", PutFileCommand);
+$injector.registerCommand(["device|put-file", "devices|put-file"], PutFileCommand);

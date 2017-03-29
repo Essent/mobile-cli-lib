@@ -1,16 +1,15 @@
-import {Yok} from "../../yok";
-import {format} from "util";
-import {join} from "path";
-import {MessagesService} from "../../services/messages-service";
-import {existsSync} from "fs";
-import {assert} from "chai";
-import Future = require("fibers/future");
+import { Yok } from "../../yok";
+import { format } from "util";
+import { join } from "path";
+import { MessagesService } from "../../services/messages-service";
+import { existsSync } from "fs";
+import { assert } from "chai";
 
-function createTestInjector(jsonContents: any, options?: {useRealFsExists: boolean}): IInjector {
+function createTestInjector(jsonContents: any, options?: { useRealFsExists: boolean }): IInjector {
 	let testInjector = new Yok();
 	testInjector.register("fs", {
-		exists: (path: string): IFuture<boolean> => Future.fromResult(options && options.useRealFsExists ? existsSync(path) : true),
-		readJson: (filename: string, encoding?: string): IFuture<any> => Future.fromResult(jsonContents)
+		exists: (path: string): boolean => options && options.useRealFsExists ? existsSync(path) : true,
+		readJson: (filename: string, encoding?: string): any => jsonContents
 	});
 	testInjector.register("messagesService", MessagesService);
 
@@ -28,7 +27,7 @@ describe("messages-service", () => {
 		});
 
 		it("appends the default json file when setting pathsToMessageJsonFiles", () => {
-			let injector = createTestInjector({}, {useRealFsExists: false});
+			let injector = createTestInjector({}, { useRealFsExists: false });
 			service = injector.resolve("$messagesService");
 			service.pathsToMessageJsonFiles = ["someHackyJsonFile.json"];
 
@@ -36,7 +35,7 @@ describe("messages-service", () => {
 		});
 
 		it("should throw if non-existent json file is provided", () => {
-			let injector = createTestInjector({}, {useRealFsExists: true});
+			let injector = createTestInjector({}, { useRealFsExists: true });
 			service = injector.resolve("$messagesService");
 			assert.throws(() => { service.pathsToMessageJsonFiles = ["someJsonFile.json"]; }, "someJsonFile.json does not exist");
 		});
@@ -63,7 +62,7 @@ describe("messages-service", () => {
 		});
 
 		it("should return correct value from json file if found in json message files", () => {
-			let jsonContents = {KEY: "Value"},
+			let jsonContents = { KEY: "Value" },
 				injector = createTestInjector(jsonContents);
 			service = injector.resolve("$messagesService");
 
@@ -71,7 +70,7 @@ describe("messages-service", () => {
 		});
 
 		it("should util.format value from json file if found in json message files and contains special symbol (%s,%d, etc.)", () => {
-			let jsonContents = {KEY: "%s value"},
+			let jsonContents = { KEY: "%s value" },
 				injector = createTestInjector(jsonContents);
 			service = injector.resolve("$messagesService");
 
@@ -84,10 +83,10 @@ describe("messages-service", () => {
 
 		it("should return correct value from json file if found in json message files with complex key", () => {
 			let jsonContents = {
-					KEY: {
-						NESTED_KEY: "Value"
-					}
-				},
+				KEY: {
+					NESTED_KEY: "Value"
+				}
+			},
 				injector = createTestInjector(jsonContents);
 			service = injector.resolve("$messagesService");
 
@@ -96,8 +95,8 @@ describe("messages-service", () => {
 
 		it("should return correct value from json file if found in client json before common json", () => {
 			let commonJsonContents = {
-					KEY: "Value"
-				},
+				KEY: "Value"
+			},
 				clientJsonContents = {
 					KEY: "Overriden value"
 				},
@@ -105,8 +104,8 @@ describe("messages-service", () => {
 				injector = createTestInjector({});
 
 			injector.register("fs", {
-				exists: (path: string): IFuture<boolean> => Future.fromResult(true),
-				readJson: (filename: string, encoding?: string): IFuture<any> => Future.fromResult(filename === pathToDefaultMessageJson ? commonJsonContents : clientJsonContents)
+				exists: (path: string): boolean => true,
+				readJson: (filename: string, encoding?: string): any => filename === pathToDefaultMessageJson ? commonJsonContents : clientJsonContents
 			});
 			service = injector.resolve("$messagesService");
 			service.pathsToMessageJsonFiles = ["clientJsonFile.json"];

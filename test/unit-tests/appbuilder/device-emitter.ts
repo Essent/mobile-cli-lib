@@ -1,15 +1,13 @@
-import {Yok} from "../../../yok";
-import {assert} from "chai";
-import { CommonLoggerStub } from "../stubs";
-import Future = require("fibers/future");
+import { Yok } from "../../../yok";
+import { assert } from "chai";
 import { EventEmitter } from "events";
 import { ProjectConstants } from "../../../appbuilder/project-constants";
 import { DeviceEmitter } from "../../../appbuilder/device-emitter";
 
-class AndroidDeviceDiscoveryMock extends EventEmitter {
-	public ensureAdbServerStarted(): IFuture<void> {
-		return Future.fromResult();
-	}
+// Injector dependencies must be classes.
+// EventEmitter is function, so our annotate method will fail.
+class CustomEventEmitter extends EventEmitter {
+	constructor() { super(); }
 }
 
 let companionAppIdentifiers = {
@@ -27,19 +25,15 @@ let companionAppIdentifiers = {
 
 function createTestInjector(): IInjector {
 	let testInjector = new Yok();
-	testInjector.register("androidDeviceDiscovery", AndroidDeviceDiscoveryMock);
-	testInjector.register("iOSDeviceDiscovery", EventEmitter);
-	testInjector.register("iOSSimulatorDiscovery", EventEmitter);
-	testInjector.register("devicesService", {
-		initialize: (opts: { skipInferPlatform: boolean }) => Future.fromResult()
-	});
-	testInjector.register("deviceLogProvider", EventEmitter);
+	testInjector.register("androidDeviceDiscovery", CustomEventEmitter);
+	testInjector.register("iOSDeviceDiscovery", CustomEventEmitter);
+	testInjector.register("iOSSimulatorDiscovery", CustomEventEmitter);
+	testInjector.register("deviceLogProvider", CustomEventEmitter);
 	testInjector.register("companionAppsService", {
 		getAllCompanionAppIdentifiers: () => companionAppIdentifiers
 	});
 
 	testInjector.register("projectConstants", ProjectConstants);
-	testInjector.register("logger", CommonLoggerStub);
 
 	testInjector.register("deviceEmitter", DeviceEmitter);
 
@@ -48,33 +42,13 @@ function createTestInjector(): IInjector {
 
 describe("deviceEmitter", () => {
 	let testInjector: IInjector,
-		deviceEmitter: any,
+		deviceEmitter: DeviceEmitter,
 		isOpenDeviceLogStreamCalled = false;
 
 	beforeEach(() => {
 		testInjector = createTestInjector();
 		deviceEmitter = testInjector.resolve("deviceEmitter");
 		isOpenDeviceLogStreamCalled = false;
-	});
-
-	describe("initialize", () => {
-		it("does not throw when ensureAdbServerStarted throws", () => {
-			let androidDeviceDiscovery = testInjector.resolve("androidDeviceDiscovery"),
-				logger: CommonLoggerStub = testInjector.resolve("logger");
-
-			androidDeviceDiscovery.ensureAdbServerStarted = () => {
-				return (() => {
-					throw new Error("error1");
-				}).future<void>()();
-			};
-
-			let warnOutput = "";
-			logger.warn = (warnMsg: string) => { warnOutput += warnMsg; };
-
-			deviceEmitter.initialize().wait();
-			assert.isTrue(warnOutput.indexOf("Unable to start adb server") !== -1, "When ensureAdbServerStarted throws, the string 'Unable to start adb server' must be shown as warning.");
-			assert.isTrue(warnOutput.indexOf("error1") !== -1, "When ensureAdbServerStarted throws, the error message must be shown as warning.");
-		});
 	});
 
 	describe("raises correct events after initialize is called:", () => {
@@ -85,8 +59,7 @@ describe("deviceEmitter", () => {
 			iOSDevice: any,
 			iOSSimulator: any;
 
-		beforeEach(() => {
-			deviceEmitter.initialize().wait();
+		beforeEach(async () => {
 			androidDeviceDiscovery = testInjector.resolve("androidDeviceDiscovery");
 			iOSDeviceDiscovery = testInjector.resolve("iOSDeviceDiscovery");
 			iOSSimulatorDiscovery = testInjector.resolve("iOSSimulatorDiscovery");
@@ -128,17 +101,17 @@ describe("deviceEmitter", () => {
 					});
 				};
 
-				it("is raised when working with android device", (done) => {
+				it("is raised when working with android device", (done: mocha.Done) => {
 					attachDeviceEventVerificationHandler(androidDevice.deviceInfo, done);
 					androidDeviceDiscovery.emit(deviceEvent, androidDevice);
 				});
 
-				it("is raised when working with iOS device", (done) => {
+				it("is raised when working with iOS device", (done: mocha.Done) => {
 					attachDeviceEventVerificationHandler(iOSDevice.deviceInfo, done);
 					iOSDeviceDiscovery.emit(deviceEvent, iOSDevice);
 				});
 
-				it("is raised when working with iOS simulator", (done) => {
+				it("is raised when working with iOS simulator", (done: mocha.Done) => {
 					attachDeviceEventVerificationHandler(iOSSimulator.deviceInfo, done);
 					iOSSimulatorDiscovery.emit(deviceEvent, iOSSimulator);
 				});
@@ -159,17 +132,17 @@ describe("deviceEmitter", () => {
 				});
 			};
 
-			it("is called when working with android device", (done) => {
+			it("is called when working with android device", (done: mocha.Done) => {
 				attachDeviceEventVerificationHandler(androidDevice.deviceInfo, done);
 				androidDeviceDiscovery.emit("deviceFound", androidDevice);
 			});
 
-			it("is called when working with iOS device", (done) => {
+			it("is called when working with iOS device", (done: mocha.Done) => {
 				attachDeviceEventVerificationHandler(iOSDevice.deviceInfo, done);
 				iOSDeviceDiscovery.emit("deviceFound", iOSDevice);
 			});
 
-			it("is called when working with iOS simulator", (done) => {
+			it("is called when working with iOS simulator", (done: mocha.Done) => {
 				attachDeviceEventVerificationHandler(iOSSimulator.deviceInfo, done);
 				iOSSimulatorDiscovery.emit("deviceFound", iOSSimulator);
 			});
@@ -195,19 +168,19 @@ describe("deviceEmitter", () => {
 					});
 				};
 
-				it("is called when android device reports data", (done) => {
+				it("is called when android device reports data", (done: mocha.Done) => {
 					attachDeviceLogDataVerificationHandler(androidDevice.deviceInfo.identifier, done);
 					androidDeviceDiscovery.emit("deviceFound", androidDevice);
 					deviceLogProvider.emit("data", androidDevice.deviceInfo.identifier, expectedDeviceLogData);
 				});
 
-				it("is called when iOS device reports data", (done) => {
+				it("is called when iOS device reports data", (done: mocha.Done) => {
 					attachDeviceLogDataVerificationHandler(iOSDevice.deviceInfo.identifier, done);
 					iOSDeviceDiscovery.emit("deviceFound", iOSDevice);
 					deviceLogProvider.emit("data", iOSDevice.deviceInfo.identifier, expectedDeviceLogData);
 				});
 
-				it("is called when iOS simulator reports data", (done) => {
+				it("is called when iOS simulator reports data", (done: mocha.Done) => {
 					attachDeviceLogDataVerificationHandler(iOSSimulator.deviceInfo.identifier, done);
 					iOSSimulatorDiscovery.emit("deviceFound", iOSSimulator);
 					deviceLogProvider.emit("data", iOSSimulator.deviceInfo.identifier, expectedDeviceLogData);
@@ -230,19 +203,19 @@ describe("deviceEmitter", () => {
 					});
 				};
 
-				it("is raised when working with android device", (done) => {
+				it("is raised when working with android device", (done: mocha.Done) => {
 					attachApplicationEventVerificationHandler(androidDevice.deviceInfo.identifier, done);
 					androidDeviceDiscovery.emit("deviceFound", androidDevice);
 					androidDevice.applicationManager.emit(applicationEvent, expectedApplicationIdentifier);
 				});
 
-				it("is raised when working with iOS device", (done) => {
+				it("is raised when working with iOS device", (done: mocha.Done) => {
 					attachApplicationEventVerificationHandler(iOSDevice.deviceInfo.identifier, done);
 					iOSDeviceDiscovery.emit("deviceFound", iOSDevice);
 					iOSDevice.applicationManager.emit(applicationEvent, expectedApplicationIdentifier);
 				});
 
-				it("is raised when working with iOS simulator", (done) => {
+				it("is raised when working with iOS simulator", (done: mocha.Done) => {
 					attachApplicationEventVerificationHandler(iOSSimulator.deviceInfo.identifier, done);
 					iOSSimulatorDiscovery.emit("deviceFound", iOSSimulator);
 					iOSSimulator.applicationManager.emit(applicationEvent, expectedApplicationIdentifier);
@@ -262,7 +235,7 @@ describe("deviceEmitter", () => {
 					});
 				};
 
-				it("is raised when working with android device", (done) => {
+				it("is raised when working with android device", (done: mocha.Done) => {
 					let debuggableAppInfo: Mobile.IDeviceApplicationInformation = {
 						appIdentifier: "app identifier",
 						deviceIdentifier: androidDevice.deviceInfo.identifier,
@@ -274,7 +247,7 @@ describe("deviceEmitter", () => {
 					androidDevice.applicationManager.emit(applicationEvent, debuggableAppInfo);
 				});
 
-				it("is raised when working with iOS device", (done) => {
+				it("is raised when working with iOS device", (done: mocha.Done) => {
 					let debuggableAppInfo: Mobile.IDeviceApplicationInformation = {
 						appIdentifier: "app identifier",
 						deviceIdentifier: iOSDevice.deviceInfo.identifier,
@@ -286,7 +259,7 @@ describe("deviceEmitter", () => {
 					iOSDevice.applicationManager.emit(applicationEvent, debuggableAppInfo);
 				});
 
-				it("is raised when working with iOS simulator", (done) => {
+				it("is raised when working with iOS simulator", (done: mocha.Done) => {
 					let debuggableAppInfo: Mobile.IDeviceApplicationInformation = {
 						appIdentifier: "app identifier",
 						deviceIdentifier: iOSSimulator.deviceInfo.identifier,
@@ -330,7 +303,7 @@ describe("deviceEmitter", () => {
 					});
 				};
 
-				it("is raised when working with android device", (done) => {
+				it("is raised when working with android device", (done: mocha.Done) => {
 					let expectedDebuggableViewInfo: Mobile.IDebugWebViewInfo = createDebuggableWebView("test1");
 
 					attachDebuggableEventVerificationHandler(androidDevice.deviceInfo.identifier, appId, expectedDebuggableViewInfo, done);
@@ -338,7 +311,7 @@ describe("deviceEmitter", () => {
 					androidDevice.applicationManager.emit(applicationEvent, appId, expectedDebuggableViewInfo);
 				});
 
-				it("is raised when working with iOS device", (done) => {
+				it("is raised when working with iOS device", (done: mocha.Done) => {
 					let expectedDebuggableViewInfo: Mobile.IDebugWebViewInfo = createDebuggableWebView("test1");
 
 					attachDebuggableEventVerificationHandler(iOSDevice.deviceInfo.identifier, appId, expectedDebuggableViewInfo, done);
@@ -346,7 +319,7 @@ describe("deviceEmitter", () => {
 					iOSDevice.applicationManager.emit(applicationEvent, appId, expectedDebuggableViewInfo);
 				});
 
-				it("is raised when working with iOS simulator", (done) => {
+				it("is raised when working with iOS simulator", (done: mocha.Done) => {
 					let expectedDebuggableViewInfo: Mobile.IDebugWebViewInfo = createDebuggableWebView("test1");
 
 					attachDebuggableEventVerificationHandler(iOSSimulator.deviceInfo.identifier, appId, expectedDebuggableViewInfo, done);
@@ -370,7 +343,7 @@ describe("deviceEmitter", () => {
 							});
 						};
 
-						it("when working with android device", (done) => {
+						it("when working with android device", (done: mocha.Done) => {
 							attachCompanionEventVerificationHandler(androidDevice.deviceInfo.identifier, done);
 							androidDeviceDiscovery.emit("deviceFound", androidDevice);
 							androidDevice.applicationManager.emit("applicationInstalled", companionAppIdentifersForPlatform["android"]);
@@ -379,7 +352,7 @@ describe("deviceEmitter", () => {
 							}
 						});
 
-						it("when working with iOS device", (done) => {
+						it("when working with iOS device", (done: mocha.Done) => {
 							attachCompanionEventVerificationHandler(iOSDevice.deviceInfo.identifier, done);
 							iOSDeviceDiscovery.emit("deviceFound", iOSDevice);
 							iOSDevice.applicationManager.emit("applicationInstalled", companionAppIdentifersForPlatform["ios"]);
@@ -388,7 +361,7 @@ describe("deviceEmitter", () => {
 							}
 						});
 
-						it("when working with iOS simulator", (done) => {
+						it("when working with iOS simulator", (done: mocha.Done) => {
 							attachCompanionEventVerificationHandler(iOSSimulator.deviceInfo.identifier, done);
 							iOSSimulatorDiscovery.emit("deviceFound", iOSSimulator);
 							iOSSimulator.applicationManager.emit("applicationInstalled", companionAppIdentifersForPlatform["ios"]);

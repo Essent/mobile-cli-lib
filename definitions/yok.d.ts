@@ -21,12 +21,19 @@ interface IInjector extends IDisposable {
 	registerCommand(names: string[], resolver: any): void;
 	getRegisteredCommandsNames(includeDev: boolean): string[];
 	dynamicCallRegex: RegExp;
-	dynamicCall(call: string, args?: any[]): IFuture<any>;
+	dynamicCall(call: string, args?: any[]): Promise<any>;
 	isDefaultCommand(commandName: string): boolean;
-	isValidHierarchicalCommand(commandName: string, commandArguments: string[]): boolean;
+	isValidHierarchicalCommand(commandName: string, commandArguments: string[]): Promise<boolean>;
 	getChildrenCommandsNames(commandName: string): string[];
 	buildHierarchicalCommand(parentCommandName: string, commandLineArguments: string[]): any;
 	publicApi: any;
+
+	/**
+	 * Defines if it's allowed to override already required module.
+	 * This can be used in order to allow redefinition of modules, for example $logger can be replaced by a plugin.
+	 * Default value is false.
+	 */
+	overrideAlreadyRequiredModule: boolean;
 }
 
 declare var $injector: IInjector;

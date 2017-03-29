@@ -90,19 +90,17 @@ declare module Mobile {
 		applicationManager: Mobile.IDeviceApplicationManager;
 		fileSystem: Mobile.IDeviceFileSystem;
 		isEmulator: boolean;
-		openDeviceLogStream(): void;
-		getApplicationInfo(applicationIdentifier: string): IFuture<Mobile.IApplicationInfo>;
+		openDeviceLogStream(): Promise<void>;
+		getApplicationInfo(applicationIdentifier: string): Promise<Mobile.IApplicationInfo>;
+	}
+
+	interface IiOSDevice extends IDevice {
+		connectToPort(port: number): Promise<any>;
 	}
 
 	interface IAndroidDevice extends IDevice {
 		adb: Mobile.IDeviceAndroidDebugBridge;
-	}
-
-	interface IiOSDevice extends IDevice {
-		startService(serviceName: string): number;
-		mountImage(): IFuture<void>;
-		tryExecuteFunction<TResult>(func: () => TResult): TResult;
-		connectToPort(port: number): any;
+		init(): Promise<void>;
 	}
 
 	interface IiOSSimulator extends IDevice { }
@@ -111,9 +109,9 @@ declare module Mobile {
 		appIdentifier: string;
 		device: Mobile.IDevice;
 		platform: string;
-		deviceProjectRootPath: string;
+		getDeviceProjectRootPath(): Promise<string>;
 		deviceSyncZipPath?: string;
-		isLiveSyncSupported(): IFuture<boolean>;
+		isLiveSyncSupported(): Promise<boolean>;
 	}
 
 	interface IDeviceAppDataFactory {
@@ -131,12 +129,12 @@ declare module Mobile {
 
 	interface IAndroidLiveSyncService {
 		liveSyncCommands: any;
-		livesync(appIdentifier: string, liveSyncRoot: string, commands: string[]): IFuture<void>;
-		createCommandsFileOnDevice(commandsFileDevicePath: string, commands: string[]): IFuture<void>;
+		livesync(appIdentifier: string, liveSyncRoot: string, commands: string[]): Promise<void>;
+		createCommandsFileOnDevice(commandsFileDevicePath: string, commands: string[]): Promise<void>;
 	}
 
 	interface ILogcatHelper {
-		start(deviceIdentifier: string): void;
+		start(deviceIdentifier: string): Promise<void>;
 	}
 
 	/**
@@ -234,21 +232,21 @@ declare module Mobile {
 	}
 
 	interface IDeviceApplicationManager extends NodeJS.EventEmitter {
-		getInstalledApplications(): IFuture<string[]>;
-		isApplicationInstalled(appIdentifier: string): IFuture<boolean>;
-		installApplication(packageFilePath: string): IFuture<void>;
-		uninstallApplication(appIdentifier: string): IFuture<void>;
-		reinstallApplication(appIdentifier: string, packageFilePath: string): IFuture<void>;
-		startApplication(appIdentifier: string, framework?: string): IFuture<void>;
-		stopApplication(appIdentifier: string): IFuture<void>;
-		restartApplication(appIdentifier: string, bundleExecutable?: string, framework?: string): IFuture<void>;
+		getInstalledApplications(): Promise<string[]>;
+		isApplicationInstalled(appIdentifier: string): Promise<boolean>;
+		installApplication(packageFilePath: string): Promise<void>;
+		uninstallApplication(appIdentifier: string): Promise<void>;
+		reinstallApplication(appIdentifier: string, packageFilePath: string): Promise<void>;
+		startApplication(appIdentifier: string): Promise<void>;
+		stopApplication(appIdentifier: string): Promise<void>;
+		restartApplication(appIdentifier: string, appName?: string): Promise<void>;
 		canStartApplication(): boolean;
-		checkForApplicationUpdates(): IFuture<void>;
-		isLiveSyncSupported(appIdentifier: string): IFuture<boolean>;
-		getApplicationInfo(applicationIdentifier: string): IFuture<Mobile.IApplicationInfo>;
-		tryStartApplication(appIdentifier: string, framework?: string): IFuture<void>;
-		getDebuggableApps(): IFuture<Mobile.IDeviceApplicationInformation[]>;
-		getDebuggableAppViews(appIdentifiers: string[]): IFuture<IDictionary<Mobile.IDebugWebViewInfo[]>>;
+		checkForApplicationUpdates(): Promise<void>;
+		isLiveSyncSupported(appIdentifier: string): Promise<boolean>;
+		getApplicationInfo(applicationIdentifier: string): Promise<Mobile.IApplicationInfo>;
+		tryStartApplication(appIdentifier: string): Promise<void>;
+		getDebuggableApps(): Promise<Mobile.IDeviceApplicationInformation[]>;
+		getDebuggableAppViews(appIdentifiers: string[]): Promise<IDictionary<Mobile.IDebugWebViewInfo[]>>;
 	}
 
 	/**
@@ -285,14 +283,14 @@ declare module Mobile {
 	}
 
 	interface IDeviceFileSystem {
-		listFiles(devicePath: string, appIdentifier?: string): IFuture<any>;
-		getFile(deviceFilePath: string): IFuture<void>;
-		putFile(localFilePath: string, deviceFilePath: string): IFuture<void>;
-		deleteFile?(deviceFilePath: string, appIdentifier: string): void;
-		transferFiles(deviceAppData: Mobile.IDeviceAppData, localToDevicePaths: Mobile.ILocalToDevicePathData[]): IFuture<void>;
-		transferDirectory(deviceAppData: Mobile.IDeviceAppData, localToDevicePaths: Mobile.ILocalToDevicePathData[], projectFilesPath: string): IFuture<void>;
-		transferFile?(localFilePath: string, deviceFilePath: string): IFuture<void>;
-		createFileOnDevice?(deviceFilePath: string, fileContent: string): IFuture<void>;
+		listFiles(devicePath: string, appIdentifier?: string): Promise<any>;
+		getFile(deviceFilePath: string, appIdentifier: string, outputFilePath?: string): Promise<void>;
+		putFile(localFilePath: string, deviceFilePath: string, appIdentifier: string): Promise<void>;
+		deleteFile?(deviceFilePath: string, appIdentifier: string): Promise<void>;
+		transferFiles(deviceAppData: Mobile.IDeviceAppData, localToDevicePaths: Mobile.ILocalToDevicePathData[]): Promise<void>;
+		transferDirectory(deviceAppData: Mobile.IDeviceAppData, localToDevicePaths: Mobile.ILocalToDevicePathData[], projectFilesPath: string): Promise<void>;
+		transferFile?(localFilePath: string, deviceFilePath: string): Promise<void>;
+		createFileOnDevice?(deviceFilePath: string, fileContent: string): Promise<void>;
 	}
 
 	interface IAndroidDebugBridgeCommandOptions {
@@ -303,12 +301,12 @@ declare module Mobile {
 	}
 
 	interface IAndroidDebugBridge {
-		executeCommand(args: string[], options?: IAndroidDebugBridgeCommandOptions): IFuture<any>;
+		executeCommand(args: string[], options?: IAndroidDebugBridgeCommandOptions): Promise<any>;
 	}
 
 	interface IDeviceAndroidDebugBridge extends IAndroidDebugBridge {
-		executeShellCommand(args: string[], options?: IAndroidDebugBridgeCommandOptions): IFuture<any>;
-		sendBroadcastToDevice(action: string, extras?: IStringDictionary): IFuture<number>;
+		executeShellCommand(args: string[], options?: IAndroidDebugBridgeCommandOptions): Promise<any>;
+		sendBroadcastToDevice(action: string, extras?: IStringDictionary): Promise<number>;
 	}
 
 	interface IDebugOnDeviceSetup {
@@ -316,25 +314,59 @@ declare module Mobile {
 	}
 
 	interface IDeviceDiscovery extends NodeJS.EventEmitter {
-		startLookingForDevices(): IFuture<void>;
-		checkForDevices(): IFuture<void>;
+		startLookingForDevices(): Promise<void>;
+		checkForDevices(): Promise<void>;
 	}
 
 	interface IAndroidDeviceDiscovery extends IDeviceDiscovery {
-		ensureAdbServerStarted(): IFuture<any>;
+		ensureAdbServerStarted(): Promise<any>;
 	}
 
+	/**
+	 * Describes options that can be passed to devices service's initialization method.
+	 */
 	interface IDevicesServicesInitializationOptions {
+		/**
+		 * The platform for which to initialize. If passed will detect only devices belonging to said platform.
+		 */
 		platform?: string;
+		/**
+		 * Currently unused.
+		 */
+		emulator?: boolean;
+		/**
+		 * Specifies a device with which to work with.
+		 */
 		deviceId?: string;
+		/**
+		 * Specifies that platform should not be infered. That is to say that all devices will be detected regardless of platform and no errors will be thrown.
+		 */
 		skipInferPlatform?: boolean;
+		/**
+		 * If passed along with skipInferPlatform then the device detection interval will not be started but instead the currently attached devices will be detected.
+		 */
+		skipDeviceDetectionInterval?: boolean;
 	}
 
 	interface IDevicesService {
 		hasDevices: boolean;
 		deviceCount: number;
-		execute(action: (device: Mobile.IDevice) => IFuture<void>, canExecute?: (dev: Mobile.IDevice) => boolean, options?: { allowNoDevices?: boolean }): IFuture<void>;
-		initialize(data?: IDevicesServicesInitializationOptions): IFuture<void>;
+
+		/**
+		 * Optionally starts emulator depending on the passed options.
+		 * @param {IDevicesServicesInitializationOptions} data Defines wheather to start default or specific emulator.
+		 * @return {Promise<void>}
+		 */
+		startEmulatorIfNecessary(data?: Mobile.IDevicesServicesInitializationOptions): Promise<void>;
+
+		execute(action: (device: Mobile.IDevice) => Promise<void>, canExecute?: (dev: Mobile.IDevice) => boolean, options?: { allowNoDevices?: boolean }): Promise<void>;
+
+		/**
+		 * Initializes DevicesService, so after that device operations could be executed.
+		 * @param {IDevicesServicesInitializationOptions} data Defines the options which will be used for whole devicesService.
+		 * @return {Promise<void>}
+		 */
+		initialize(data?: IDevicesServicesInitializationOptions): Promise<void>;
 		platform: string;
 		getDevices(): Mobile.IDeviceInfo[];
 		getDevicesForPlatform(platform: string): Mobile.IDevice[];
@@ -344,18 +376,17 @@ declare module Mobile {
 		isiOSDevice(device: Mobile.IDevice): boolean;
 		isiOSSimulator(device: Mobile.IDevice): boolean;
 		isOnlyiOSSimultorRunning(): boolean;
-		isAppInstalledOnDevices(deviceIdentifiers: string[], appIdentifier: string, framework: string): IFuture<IAppInstalledInfo>[];
+		isAppInstalledOnDevices(deviceIdentifiers: string[], appIdentifier: string, framework: string): Promise<IAppInstalledInfo>[];
 		setLogLevel(logLevel: string, deviceIdentifier?: string): void;
-		deployOnDevices(deviceIdentifiers: string[], packageFile: string, packageName: string, framework: string): IFuture<void>[];
-		startDeviceDetectionInterval(): void;
-		stopDeviceDetectionInterval(): IFuture<void>;
+		deployOnDevices(deviceIdentifiers: string[], packageFile: string, packageName: string, framework: string): Promise<void>[];
+		startDeviceDetectionInterval(): Promise<void>;
 		getDeviceByIdentifier(identifier: string): Mobile.IDevice;
-		mapAbstractToTcpPort(deviceIdentifier: string, appIdentifier: string, framework: string): IFuture<string>;
-		detectCurrentlyAttachedDevices(): IFuture<void>;
-		startEmulator(platform?: string): IFuture<void>;
-		isCompanionAppInstalledOnDevices(deviceIdentifiers: string[], framework: string): IFuture<IAppInstalledInfo>[];
-		getDebuggableApps(deviceIdentifiers: string[]): IFuture<Mobile.IDeviceApplicationInformation[]>[];
-		getDebuggableViews(deviceIdentifier: string, appIdentifier: string): IFuture<Mobile.IDebugWebViewInfo[]>;
+		mapAbstractToTcpPort(deviceIdentifier: string, appIdentifier: string, framework: string): Promise<string>;
+		detectCurrentlyAttachedDevices(): Promise<void>;
+		startEmulator(platform?: string, emulatorImage?: string): Promise<void>;
+		isCompanionAppInstalledOnDevices(deviceIdentifiers: string[], framework: string): Promise<IAppInstalledInfo>[];
+		getDebuggableApps(deviceIdentifiers: string[]): Promise<Mobile.IDeviceApplicationInformation[]>[];
+		getDebuggableViews(deviceIdentifier: string, appIdentifier: string): Promise<Mobile.IDebugWebViewInfo[]>;
 	}
 
 	/**
@@ -369,23 +400,23 @@ declare module Mobile {
 		 * @param framework {string} The framework of the application. Could be Cordova or NativeScript.
 		 * @return {string} Returns the tcp port number which is mapped to the abstract port.
 		 */
-		mapAbstractToTcpPort(deviceIdentifier: string, appIdentifier: string, framework: string): IFuture<string>;
+		mapAbstractToTcpPort(deviceIdentifier: string, appIdentifier: string, framework: string): Promise<string>;
 
 		/**
 		 * Gets the applications which are available for debugging on the specified device.
 		 * @param deviceIdentifier The identifier of the device.
 		 * @return {Mobile.IDeviceApplicationInformation[]} Returns array of applications information for the applications which are available for debugging.
 		 */
-		getDebuggableApps(deviceIdentifier: string): IFuture<Mobile.IDeviceApplicationInformation[]>;
+		getDebuggableApps(deviceIdentifier: string): Promise<Mobile.IDeviceApplicationInformation[]>;
 
 		/**
 		 * Gets all mapped abstract to tcp ports for specified device id and application identifiers.
 		 * @param deviceIdentifier {string} The identifier of the device.
 		 * @param appIdentifiers {string[]} Application identifiers that will be checked.
 		 * @param framework {string} The framework of the application. Could be Cordova or NativeScript.
-		 * @return {IFuture<IDictionary<number>>} Dictionary, where the keys are app identifiers and the values are local ports.
+		 * @return {Promise<IDictionary<number>>} Dictionary, where the keys are app identifiers and the values are local ports.
 		 */
-		getMappedAbstractToTcpPorts(deviceIdentifier: string, appIdentifiers: string[], framework: string): IFuture<IDictionary<number>>;
+		getMappedAbstractToTcpPorts(deviceIdentifier: string, appIdentifiers: string[], framework: string): Promise<IDictionary<number>>;
 	}
 
 	/**
@@ -435,114 +466,7 @@ declare module Mobile {
 	}
 
 	interface IiTunesValidator {
-		getError(): IFuture<string>;
-	}
-
-	interface IiOSCore {
-		getCoreFoundationLibrary(): any;
-		getMobileDeviceLibrary(): any;
-	}
-
-	interface ICoreFoundation {
-		runLoopRun(): void;
-		runLoopGetCurrent(): any;
-		stringCreateWithCString(alloc: NodeBuffer, str: string, encoding: number): NodeBuffer;
-		dictionaryGetValue(theDict: NodeBuffer, value: NodeBuffer): NodeBuffer;
-		numberGetValue(num: NodeBuffer, theType: number, valuePtr: NodeBuffer): boolean;
-		kCFRunLoopCommonModes(): NodeBuffer;
-		kCFRunLoopDefaultMode(): NodeBuffer;
-		kCFTypeDictionaryKeyCallBacks(): NodeBuffer;
-		kCFTypeDictionaryValueCallBacks(): NodeBuffer;
-		runLoopTimerCreate(allocator: NodeBuffer, fireDate: number, interval: number, flags: number, order: number, callout: NodeBuffer, context: any): NodeBuffer;
-		absoluteTimeGetCurrent(): number;
-		runLoopAddTimer(r1: NodeBuffer, timer: NodeBuffer, mode: NodeBuffer): void;
-		runLoopRemoveTimer(r1: NodeBuffer, timer: NodeBuffer, mode: NodeBuffer): void;
-		runLoopStop(r1: any): void;
-		convertCFStringToCString(cfstr: NodeBuffer): string;
-		dictionaryCreate(allocator: NodeBuffer, keys: NodeBuffer, values: NodeBuffer, count: number, dictionaryKeyCallbacks: NodeBuffer, dictionaryValueCallbacks: NodeBuffer): NodeBuffer;
-		getTypeID(type: NodeBuffer): number;
-		stringGetCString(theString: NodeBuffer, buffer: NodeBuffer, bufferSize: number, encoding: number): boolean;
-		stringGetLength(theString: NodeBuffer): number;
-		dictionaryGetCount(theDict: NodeBuffer): number;
-		createCFString(str: string): NodeBuffer;
-		dictToPlistEncoding(dict: { [key: string]: {} }, format: number): NodeBuffer;
-		dictFromPlistEncoding(str: NodeBuffer): NodeBuffer;
-		dictionaryGetTypeID(): number;
-		stringGetTypeID(): number;
-		dataGetTypeID(): number;
-		numberGetTypeID(): number;
-		booleanGetTypeID(): number;
-		arrayGetTypeID(): number;
-		dateGetTypeID(): number;
-		setGetTypeID(): number;
-		dictionaryGetKeysAndValues(dictionary: NodeBuffer, keys: NodeBuffer, values: NodeBuffer): void;
-		dataCreate(allocator: NodeBuffer, data: NodeBuffer, length: number): any;
-		cfTypeFrom(value: IDictionary<any>): NodeBuffer;
-		cfTypeTo(cfDictionary: NodeBuffer): IDictionary<any>;
-	}
-
-	interface IMobileDevice {
-		deviceNotificationSubscribe(notificationCallback: NodeBuffer, p1: number, p2: number, context: any, callbackSignature: NodeBuffer): number;
-		deviceCopyDeviceIdentifier(devicePointer: NodeBuffer): NodeBuffer;
-		deviceCopyValue(devicePointer: NodeBuffer, domain: NodeBuffer, name: NodeBuffer): NodeBuffer;
-		deviceConnect(devicePointer: NodeBuffer): number;
-		deviceIsPaired(devicePointer: NodeBuffer): number;
-		devicePair(devicePointer: NodeBuffer): number;
-		deviceValidatePairing(devicePointer: NodeBuffer): number;
-		deviceStartSession(devicePointer: NodeBuffer): number;
-		deviceStopSession(devicePointer: NodeBuffer): number;
-		deviceDisconnect(devicePointer: NodeBuffer): number;
-		deviceStartService(devicePointer: NodeBuffer, serviceName: NodeBuffer, socketNumber: NodeBuffer): number;
-		deviceTransferApplication(service: number, packageFile: NodeBuffer, options: NodeBuffer, installationCallback: NodeBuffer): number;
-		deviceInstallApplication(service: number, packageFile: NodeBuffer, options: NodeBuffer, installationCallback: NodeBuffer): number;
-		deviceUninstallApplication(service: number, bundleId: NodeBuffer, options: NodeBuffer, callback: NodeBuffer): number;
-		deviceStartHouseArrestService(devicePointer: NodeBuffer, bundleId: NodeBuffer, options: NodeBuffer, fdRef: NodeBuffer): number;
-		deviceMountImage(devicePointer: NodeBuffer, imagePath: NodeBuffer, options: NodeBuffer, mountCallBack: NodeBuffer): number;
-		deviceLookupApplications(devicePointer: NodeBuffer, appType: number, result: NodeBuffer): number;
-		deviceGetInterfaceType(devicePointer: NodeBuffer): number;
-		deviceGetConnectionId(devicePointer: NodeBuffer): number;
-		afcConnectionOpen(service: number, timeout: number, afcConnection: NodeBuffer): number;
-		afcConnectionClose(afcConnection: NodeBuffer): number;
-		afcDirectoryCreate(afcConnection: NodeBuffer, path: string): number;
-		afcFileInfoOpen(afcConnection: NodeBuffer, path: string, afcDirectory: NodeBuffer): number;
-		afcFileRefOpen(afcConnection: NodeBuffer, path: string, mode: number, afcFileRef: NodeBuffer): number;
-		afcFileRefClose(afcConnection: NodeBuffer, afcFileRef: number): number;
-		afcFileRefWrite(afcConnection: NodeBuffer, afcFileRef: number, buffer: NodeBuffer, byteLength: number): number;
-		afcFileRefRead(afcConnection: NodeBuffer, afcFileRef: number, buffer: NodeBuffer, byteLength: NodeBuffer): number;
-		afcRemovePath(afcConnection: NodeBuffer, path: string): number;
-		afcDirectoryOpen(afcConnection: NodeBuffer, path: string, afcDirectory: NodeBuffer): number;
-		afcDirectoryRead(afcConnection: NodeBuffer, afcdirectory: NodeBuffer, name: NodeBuffer): number;
-		afcDirectoryClose(afcConnection: NodeBuffer, afcdirectory: NodeBuffer): number;
-		isDataReceivingCompleted(reply: IDictionary<any>): boolean;
-		setLogLevel(logLevel: number): number;
-
-		/**
-		 * Connect to a port on iOS device connected over USB.
-		 * @param connectionId Connection ID obtained throught IMobileDevice deviceGetConnectionId.
-		 * @param port Port on the device to connect to. The native API expects it in big endian!
-		 * @param socketRef Out param, reference to the socket file descriptor.
-		 */
-		uSBMuxConnectByPort(connectionId: number, port: number, socketRef: NodeBuffer): number;
-	}
-
-	interface IHouseArrestClient {
-		getAfcClientForAppContainer(applicationIdentifier: string): Mobile.IAfcClient;
-		getAfcClientForAppDocuments(applicationIdentifier: string): Mobile.IAfcClient;
-		closeSocket(): void;
-	}
-
-	interface IAfcClient {
-		open(path: string, mode: string): Mobile.IAfcFile;
-		transfer(localFilePath: string, devicePath: string): IFuture<void>;
-		deleteFile(devicePath: string): void;
-		mkdir(path: string): void;
-		listDir(path: string): string[];
-	}
-
-	interface IAfcFile {
-		write(buffer: any, byteLength?: any): boolean;
-		read(len: number): any;
-		close(): void;
+		getError(): string;
 	}
 
 	interface ILocalToDevicePathData {
@@ -554,37 +478,6 @@ declare module Mobile {
 
 	interface ILocalToDevicePathDataFactory {
 		create(fileName: string, localProjectRootPath: string, onDeviceFileName: string, deviceProjectRootPath: string): Mobile.ILocalToDevicePathData;
-	}
-
-	interface IiOSSocketResponseData {
-		Status?: string;
-		Error?: string;
-		PercentComplete?: string;
-		Complete?: boolean;
-	}
-
-	interface IiOSDeviceSocket {
-		receiveMessage(): IFuture<IiOSSocketResponseData>;
-		readSystemLog(action: (data: string) => void): void;
-		sendMessage(message: { [key: string]: {} }, format?: number): void;
-		sendMessage(message: string): void;
-		sendAll?(data: NodeBuffer): void;
-		receiveAll?(callback: (data: NodeBuffer) => void): void;
-		exchange(message: IDictionary<any>): IFuture<IiOSSocketResponseData>;
-		close(): void;
-	}
-
-	interface IGDBServer {
-		run(argv: string[]): IFuture<void>;
-		kill(argv: string[]): IFuture<void>;
-		destroy(): void;
-	}
-
-	interface INotificationProxyClient {
-		postNotification(notificationName: string): void;
-		postNotificationAndAttachForData(notificationName: string): void;
-		addObserver(name: string, callback: (_name: string) => void): any;
-		removeObserver(name: string, callback: (_name: string) => void): void;
 	}
 
 	interface IPlatformCapabilities {
@@ -606,15 +499,26 @@ declare module Mobile {
 	}
 
 	interface IEmulatorPlatformServices {
-		checkDependencies(): IFuture<void>;
-		checkAvailability(dependsOnProject?: boolean): IFuture<void>;
-		startEmulator(): IFuture<string>;
-		runApplicationOnEmulator(app: string, emulatorOptions?: IEmulatorOptions): IFuture<any>;
-		getEmulatorId(): IFuture<string>;
+		checkDependencies(): Promise<void>;
+
+		/**
+		 * Checks if the current system can start emulator of the specified mobile platform and throws error in case it cannot.
+		 * @param {boolean} dependsOnProject Defines if the starting of emulator depends on the project configuration.
+		 * @returns void
+		 */
+		checkAvailability(dependsOnProject?: boolean): void;
+
+		startEmulator(emulatorImage?: string): Promise<string>
+		runApplicationOnEmulator(app: string, emulatorOptions?: IEmulatorOptions): Promise<any>;
+		getEmulatorId(): Promise<string>;
+		getRunningEmulatorId(image: string): Promise<string>;
 	}
 
 	interface IAndroidEmulatorServices extends IEmulatorPlatformServices {
-		getAllRunningEmulators(): IFuture<string[]>;
+		getAllRunningEmulators(): Promise<string[]>;
+		pathToEmulatorExecutable: string;
+		getInfoFromAvd(avdName: string): Mobile.IAvdInfo;
+		getAvds(): string[];
 	}
 
 	interface IiSimDevice {
@@ -631,11 +535,16 @@ declare module Mobile {
 	}
 
 	interface IiOSSimulatorService extends IEmulatorPlatformServices {
-		postDarwinNotification(notification: string): IFuture<void>;
+		postDarwinNotification(notification: string): Promise<void>;
 	}
 
 	interface IEmulatorSettingsService {
-		canStart(platform: string): IFuture<boolean>;
+		/**
+		 * Gives information if current project can be started in emulator.
+		 * @param {string} platform The mobile platform of the emulator (android, ios, wp8).
+		 * @returns {boolean} true in case the project can be started in emulator. In case not, the method will throw error.
+		 */
+		canStart(platform: string): boolean;
 		minVersion: number;
 	}
 
@@ -653,6 +562,24 @@ declare module Mobile {
 	interface IPlatformsCapabilities {
 		getPlatformNames(): string[];
 		getAllCapabilities(): IDictionary<Mobile.IPlatformCapabilities>;
+	}
+
+	//todo: plamen5kov: this is a duplicate of an interface (IEmulatorPlatformService) fix after 3.0-RC. nativescript-cli/lib/definitions/emulator-platform-service.d.ts
+	interface IEmulatorImageService {
+		listAvailableEmulators(platform: string): Promise<void>;
+		getEmulatorInfo(platform: string, nameOfId: string): Promise<IEmulatorInfo>;
+		getiOSEmulators(): Promise<IEmulatorInfo[]>;
+		getAndroidEmulators(): IEmulatorInfo[];
+	}
+
+	//todo: plamen5kov: this is a duplicate of an interface (IEmulatorInfo) fix after 3.0-RC nativescript-cli/lib/definitions/emulator-platform-service.d.ts
+	interface IEmulatorInfo {
+		name: string;
+		version: string;
+		platform: string;
+		id: string;
+		type: string;
+		isRunning?: boolean;
 	}
 
 	interface IMobileHelper {
@@ -692,25 +619,25 @@ declare module Mobile {
 		 * If hash file exists on device, read the hashes from the file and returns them as array
 		 * If hash file doesn't exist on device, returns null
 		 */
-		getShasumsFromDevice(): IFuture<IStringDictionary>;
+		getShasumsFromDevice(): Promise<IStringDictionary>;
 		/**
 		 * Computes the shasums of localToDevicePaths and changes the content of hash file on device
 		 */
-		uploadHashFileToDevice(data: IStringDictionary | Mobile.ILocalToDevicePathData[]): IFuture<void>;
+		uploadHashFileToDevice(data: IStringDictionary | Mobile.ILocalToDevicePathData[]): Promise<void>;
 		/**
 		 * Computes the shasums of localToDevicePaths and updates hash file on device
 		 */
-		updateHashes(localToDevicePaths: Mobile.ILocalToDevicePathData[]): IFuture<boolean>;
+		updateHashes(localToDevicePaths: Mobile.ILocalToDevicePathData[]): Promise<boolean>;
 		/**
 		 * Computes the shasums of localToDevicePaths and removes them from hash file on device
 		 */
-		removeHashes(localToDevicePaths: Mobile.ILocalToDevicePathData[]): IFuture<boolean>;
+		removeHashes(localToDevicePaths: Mobile.ILocalToDevicePathData[]): Promise<boolean>;
 
 		/**
 		 * Detects if there's hash file on the device for the specified device.
-		 * @return {IFuture<boolean>} boolean True if file exists and false otherwise.
+		 * @return {Promise<boolean>} boolean True if file exists and false otherwise.
 		 */
-		doesShasumFileExistsOnDevice(): IFuture<boolean>;
+		doesShasumFileExistsOnDevice(): Promise<boolean>;
 	}
 
 	/**
@@ -807,3 +734,47 @@ declare module Mobile {
 		framework: string;
 	}
 }
+
+interface IIOSDeviceOperations extends IDisposable {
+	install(ipaPath: string, deviceIdentifiers: string[], errorHandler?: DeviceOperationErrorHandler): Promise<IOSDeviceResponse>;
+
+	uninstall(appIdentifier: string, deviceIdentifiers: string[], errorHandler?: DeviceOperationErrorHandler): Promise<IOSDeviceResponse>;
+
+	startLookingForDevices(deviceFoundCallback: DeviceInfoCallback, deviceLostCallback: DeviceInfoCallback): Promise<void>;
+
+	startDeviceLog(deviceIdentifier: string, printLogFunction: (data: string, deviceIdentifier: string) => void): void;
+
+	apps(deviceIdentifiers: string[], errorHandler?: DeviceOperationErrorHandler): Promise<IOSDeviceAppInfo>;
+
+	listDirectory(listArray: IOSDeviceLib.IReadOperationData[], errorHandler?: DeviceOperationErrorHandler): Promise<IOSDeviceMultipleResponse>;
+
+	readFiles(deviceFilePaths: IOSDeviceLib.IReadOperationData[], errorHandler?: DeviceOperationErrorHandler): Promise<IOSDeviceResponse>;
+
+	downloadFiles(deviceFilePaths: IOSDeviceLib.IFileOperationData[], errorHandler?: DeviceOperationErrorHandler): Promise<IOSDeviceResponse>;
+
+	uploadFiles(files: IOSDeviceLib.IUploadFilesData[], errorHandler?: DeviceOperationErrorHandler): Promise<IOSDeviceResponse>;
+
+	deleteFiles(deleteArray: IOSDeviceLib.IDeleteFileData[], errorHandler?: DeviceOperationErrorHandler): Promise<IOSDeviceResponse>;
+
+	start(startArray: IOSDeviceLib.IDdiApplicationData[], errorHandler?: DeviceOperationErrorHandler): Promise<IOSDeviceResponse>;
+
+	stop(stopArray: IOSDeviceLib.IDdiApplicationData[], errorHandler?: DeviceOperationErrorHandler): Promise<IOSDeviceResponse>;
+
+	postNotification(postNotificatioNArray: IOSDeviceLib.IPostNotificationData[], errorHandler?: DeviceOperationErrorHandler): Promise<IOSDeviceResponse>;
+
+	awaitNotificationResponse(awaitNotificationResponseArray: IOSDeviceLib.IAwaitNotificatioNResponseData[], errorHandler?: DeviceOperationErrorHandler): Promise<IOSDeviceResponse>;
+
+	connectToPort(connectToPortArray: IOSDeviceLib.IConnectToPortData[], errorHandler?: DeviceOperationErrorHandler): Promise<IDictionary<IOSDeviceLib.IConnectToPortResponse[]>>;
+
+	setShouldDispose(shouldDispose: boolean): void;
+}
+
+type DeviceOperationErrorHandler = (err: IOSDeviceLib.IDeviceError) => void;
+
+type DeviceInfoCallback = (deviceInfo: IOSDeviceLib.IDeviceActionInfo) => void;
+
+type IOSDeviceResponse = IDictionary<IOSDeviceLib.IDeviceResponse[]>;
+
+type IOSDeviceMultipleResponse = IDictionary<IOSDeviceLib.IDeviceMultipleResponse[]>;
+
+type IOSDeviceAppInfo = IDictionary<IOSDeviceLib.IDeviceAppInfo[]>;

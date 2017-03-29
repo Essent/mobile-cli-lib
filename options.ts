@@ -32,7 +32,7 @@ export class OptionsBase {
 		private $errors: IErrors,
 		private $staticConfig: Config.IStaticConfig) {
 
-		_.extend(this.options, this.commonOptions, this.globalOptions);
+		this.options = _.extend({}, this.commonOptions, this.options, this.globalOptions);
 		this.setArgv();
 	}
 
@@ -61,7 +61,6 @@ export class OptionsBase {
 			geny: { type: OptionType.String },
 			debugBrk: { type: OptionType.Boolean },
 			debugPort: { type: OptionType.Number },
-			getPort: { type: OptionType.Boolean },
 			start: { type: OptionType.Boolean },
 			stop: { type: OptionType.Boolean },
 			ddi: { type: OptionType.String }, // the path to developer  disk image
@@ -72,6 +71,8 @@ export class OptionsBase {
 			emulator: { type: OptionType.Boolean },
 			sdk: { type: OptionType.String },
 			template: { type: OptionType.String },
+			certificate: { type: OptionType.String },
+			certificatePassword: { type: OptionType.String },
 			release: { type: OptionType.Boolean, alias: "r" },
 			var: { type: OptionType.Object },
 			default: { type: OptionType.Boolean },
@@ -181,7 +182,7 @@ export class OptionsBase {
 	}
 
 	private setArgv(): void {
-		let opts:  IDictionary<IDashedOption> = <IDictionary<IDashedOption>> {};
+		let opts: IDictionary<IDashedOption> = <IDictionary<IDashedOption>>{};
 		_.each(this.options, (value: IDashedOption, key: string) => {
 			opts[this.getDashedOptionName(key)] = value;
 		});

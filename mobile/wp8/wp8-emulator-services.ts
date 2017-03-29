@@ -1,5 +1,4 @@
 import * as path from "path";
-import future = require("fibers/future");
 
 class Wp8EmulatorServices implements Mobile.IEmulatorPlatformServices {
 	private static WP8_LAUNCHER = "XapDeployCmd.exe";
@@ -17,41 +16,42 @@ class Wp8EmulatorServices implements Mobile.IEmulatorPlatformServices {
 		private $hostInfo: IHostInfo,
 		private $fs: IFileSystem) { }
 
-	public getEmulatorId(): IFuture<string> {
-		return future.fromResult("");
+	public async getEmulatorId(): Promise<string> {
+		return "";
 	}
 
-	public checkDependencies(): IFuture<void> {
-		return future.fromResult();
+	public async getRunningEmulatorId(image: string): Promise<string> {
+		//todo: plamen5kov: fix later if necessary
+		return "";
 	}
 
-	public checkAvailability(): IFuture<void> {
-		return (() => {
-			if (!this.$fs.exists(this.getPathToEmulatorStarter()).wait()) {
-				this.$errors.failWithoutHelp("You do not have Windows Phone 8 SDK installed. Please install it in order to continue.");
-			}
-
-			if (!this.$hostInfo.isWindows) {
-				this.$errors.fail("Windows Phone Emulator is available only on Windows 8 or later.");
-			}
-
-			let platform = this.$devicePlatformsConstants.WP8;
-			if (!this.$emulatorSettingsService.canStart(platform).wait()) {
-				this.$errors.fail("The current project does not target Windows Phone 8 and cannot be run in the Windows Phone emulator.");
-			}
-		}).future<void>()();
+	public async checkDependencies(): Promise<void> {
+		return;
 	}
 
-	public startEmulator(): IFuture<string> {
-		return future.fromResult("Not implemented.");
+	public checkAvailability(): void {
+		if (!this.$fs.exists(this.getPathToEmulatorStarter())) {
+			this.$errors.failWithoutHelp("You do not have Windows Phone 8 SDK installed. Please install it in order to continue.");
+		}
+
+		if (!this.$hostInfo.isWindows) {
+			this.$errors.fail("Windows Phone Emulator is available only on Windows 8 or later.");
+		}
+
+		let platform = this.$devicePlatformsConstants.WP8;
+		if (!this.$emulatorSettingsService.canStart(platform)) {
+			this.$errors.fail("The current project does not target Windows Phone 8 and cannot be run in the Windows Phone emulator.");
+		}
 	}
 
-	public runApplicationOnEmulator(app: string, emulatorOptions?: Mobile.IEmulatorOptions): IFuture<void> {
-		return (() => {
-			this.$logger.info("Starting Windows Phone Emulator");
-			let emulatorStarter = this.getPathToEmulatorStarter();
-			this.$childProcess.spawn(emulatorStarter, ["/installlaunch", app, "/targetdevice:xd"], { stdio: "ignore", detached: true }).unref();
-		}).future<void>()();
+	public async startEmulator(): Promise<string> {
+		return "Not implemented.";
+	}
+
+	public async runApplicationOnEmulator(app: string, emulatorOptions?: Mobile.IEmulatorOptions): Promise<void> {
+		this.$logger.info("Starting Windows Phone Emulator");
+		let emulatorStarter = this.getPathToEmulatorStarter();
+		this.$childProcess.spawn(emulatorStarter, ["/installlaunch", app, "/targetdevice:xd"], { stdio: "ignore", detached: true }).unref();
 	}
 
 	private getPathToEmulatorStarter(): string {

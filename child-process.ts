@@ -1,44 +1,47 @@
-import Future = require("fibers/future");
 import * as child_process from "child_process";
+import { EventEmitter } from "events";
 
-export class ChildProcess implements IChildProcess {
+export class ChildProcess extends EventEmitter implements IChildProcess {
 	constructor(private $logger: ILogger,
-		private $errors: IErrors) {}
-
-	public exec(command: string, options?: any, execOptions?: IExecOptions): IFuture<any> {
-		let future = new Future<any>();
-		let callback = (error: Error, stdout: NodeBuffer, stderr: NodeBuffer) => {
-			this.$logger.trace("Exec %s \n stdout: %s \n stderr: %s", command, stdout.toString(), stderr.toString());
-
-			if(error) {
-				future.throw(error);
-			} else {
-				let output = execOptions && execOptions.showStderr ?  { stdout, stderr } : stdout;
-				future.return(output);
-			}
-		};
-
-		if (options) {
-			child_process.exec(command, options, callback);
-		} else {
-			child_process.exec(command, callback);
-		}
-
-		return future;
+		private $errors: IErrors) {
+		super();
 	}
 
-	public execFile(command: string, args: string[]): IFuture<any> {
-		this.$logger.debug("execFile: %s %s", command, this.getArgumentsAsQuotedString(args));
-		let future = new Future<any>();
-		child_process.execFile(command, args, (error: any, stdout: NodeBuffer) => {
-			if(error) {
-				future.throw(error);
-			} else {
-				future.return(stdout);
-			}
-		});
+	public async exec(command: string, options?: any, execOptions?: IExecOptions): Promise<any> {
+		return new Promise<any>((resolve, reject) => {
+			let callback = (error: Error, stdout: NodeBuffer, stderr: NodeBuffer) => {
+				this.$logger.trace("Exec %s \n stdout: %s \n stderr: %s", command, stdout.toString(), stderr.toString());
 
-		return future;
+				if (error) {
+					reject(error);
+				} else {
+					let output = execOptions && execOptions.showStderr ? { stdout, stderr } : stdout;
+					resolve(output);
+				}
+			};
+
+			if (options) {
+				child_process.exec(command, options, callback);
+			} else {
+				child_process.exec(command, callback);
+			}
+
+		});
+	}
+
+	public async execFile(command: string, args: string[]): Promise<any> {
+		this.$logger.debug("execFile: %s %s", command, this.getArgumentsAsQuotedString(args));
+
+		return new Promise<any>((resolve, reject) => {
+			child_process.execFile(command, args, (error: any, stdout: NodeBuffer) => {
+				if (error) {
+					reject(error);
+				} else {
+					resolve(stdout);
+				}
+			});
+
+		});
 	}
 
 	public spawn(command: string, args?: string[], options?: any): child_process.ChildProcess {
@@ -52,88 +55,100 @@ export class ChildProcess implements IChildProcess {
 	}
 
 	public spawnFromEvent(command: string, args: string[], event: string,
-			options?: any, spawnFromEventOptions?: ISpawnFromEventOptions): IFuture<ISpawnResult> { // event should be exit or close
-		let future = new Future<ISpawnResult>();
-		let childProcess = this.spawn(command, args, options);
+		options?: any, spawnFromEventOptions?: ISpawnFromEventOptions): Promise<ISpawnResult> { // event should be exit or close
 
-		let capturedOut = "";
-		let capturedErr = "";
+		return new Promise<ISpawnResult>((resolve, reject) => {
+			let childProcess = this.spawn(command, args, options);
+			let isResolved = false;
+			let capturedOut = "";
+			let capturedErr = "";
 
-		if(childProcess.stdout) {
-			childProcess.stdout.on("data", (data: string) => {
-				capturedOut += data;
-			});
-		}
-
-		if(childProcess.stderr) {
-			childProcess.stderr.on("data", (data: string) =>  {
-				capturedErr += data;
-			});
-		}
-
-		childProcess.on(event, (arg: any) => {
-			let exitCode = typeof arg === "number" ? arg : arg && arg.code;
-			let result = {
-				stdout: capturedOut,
-				stderr: capturedErr,
-				exitCode: exitCode
-			};
-
-			if(spawnFromEventOptions && spawnFromEventOptions.throwError === false) {
-				if(!future.isResolved()) {
-					this.$logger.trace("Result when throw error is false:");
-					this.$logger.trace(result);
-					future.return(result);
-				}
-			} else {
-				if (exitCode === 0) {
-					future.return(result);
-				} else {
-					let errorMessage = `Command ${command} failed with exit code ${exitCode}`;
-					if (capturedErr) {
-						errorMessage += ` Error output: \n ${capturedErr}`;
+			if (childProcess.stdout) {
+				childProcess.stdout.on("data", (data: string) => {
+					if (spawnFromEventOptions && spawnFromEventOptions.emitOptions && spawnFromEventOptions.emitOptions.eventName) {
+						this.emit(spawnFromEventOptions.emitOptions.eventName, { data, pipe: 'stdout' });
 					}
 
-					if(!future.isResolved()) {
-						future.throw(new Error(errorMessage));
+					capturedOut += data;
+				});
+			}
+
+			if (childProcess.stderr) {
+				childProcess.stderr.on("data", (data: string) => {
+					if (spawnFromEventOptions && spawnFromEventOptions.emitOptions && spawnFromEventOptions.emitOptions.eventName) {
+						this.emit(spawnFromEventOptions.emitOptions.eventName, { data, pipe: 'stderr' });
+					}
+
+					capturedErr += data;
+				});
+			}
+
+			childProcess.on(event, (arg: any) => {
+				let exitCode = typeof arg === "number" ? arg : arg && arg.code;
+				let result = {
+					stdout: capturedOut,
+					stderr: capturedErr,
+					exitCode: exitCode
+				};
+
+				if (spawnFromEventOptions && spawnFromEventOptions.throwError === false) {
+					if (!isResolved) {
+						this.$logger.trace("Result when throw error is false:");
+						this.$logger.trace(result);
+						isResolved = true;
+						resolve(result);
+					}
+				} else {
+					if (exitCode === 0) {
+						isResolved = true;
+						resolve(result);
+					} else {
+						let errorMessage = `Command ${command} failed with exit code ${exitCode}`;
+						if (capturedErr) {
+							errorMessage += ` Error output: \n ${capturedErr}`;
+						}
+
+						if (!isResolved) {
+							isResolved = true;
+							reject(new Error(errorMessage));
+						}
 					}
 				}
-			}
-		});
+			});
 
-		childProcess.once("error", (err: Error) => {
-			if(!future.isResolved()) {
-				if(spawnFromEventOptions && spawnFromEventOptions.throwError === false) {
-					let result = {
-						stdout: capturedOut,
-						stderr: err.message,
-						exitCode: (<any>err).code
-					};
-					future.return(result);
-				} else {
-					future.throw(err);
+			childProcess.once("error", (err: Error) => {
+				if (!isResolved) {
+					if (spawnFromEventOptions && spawnFromEventOptions.throwError === false) {
+						let result = {
+							stdout: capturedOut,
+							stderr: err.message,
+							exitCode: (<any>err).code
+						};
+						isResolved = true;
+						resolve(result);
+					} else {
+						isResolved = true;
+						reject(err);
+					}
 				}
-			}
+			});
+
 		});
-
-		return future;
 	}
 
-	public tryExecuteApplication(command: string, args: string[], event: string,
-			errorMessage: string, condition: (_childProcess: any) => boolean): IFuture<any> {
-		return (() => {
-			let childProcess = this.tryExecuteApplicationCore(command, args, event, errorMessage).wait();
+	public async tryExecuteApplication(command: string, args: string[], event: string,
+		errorMessage: string, condition: (_childProcess: any) => boolean): Promise<any> {
+		let childProcess = await this.tryExecuteApplicationCore(command, args, event, errorMessage);
 
-			if(condition && condition(childProcess)) {
-				this.$errors.fail(errorMessage);
-			}
-		}).future<void>()();
+		if (condition && condition(childProcess)) {
+			this.$errors.fail(errorMessage);
+		}
 	}
 
-	private tryExecuteApplicationCore(command: string, args: string[], event: string, errorMessage: string): IFuture<any> {
+	private async tryExecuteApplicationCore(command: string, args: string[], event: string, errorMessage: string): Promise<any> {
 		try {
 			return this.spawnFromEvent(command, args, event, undefined, { throwError: false });
-		} catch(e) {
+		} catch (e) {
 			let message = (e.code === "ENOENT") ? errorMessage : e.message;
 			this.$errors.failWithoutHelp(message);
 		}

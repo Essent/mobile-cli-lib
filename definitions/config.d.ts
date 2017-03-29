@@ -12,7 +12,7 @@ declare module Config {
 		SYS_REQUIREMENTS_LINK: string;
 		version: string;
 		helpTextPath: string;
-		getAdbFilePath(): IFuture<string>;
+		getAdbFilePath(): Promise<string>;
 		disableAnalytics?: boolean;
 		disableCommandHooks?: boolean;
 		enableDeviceRunCommandOnWindows?: boolean;
@@ -32,9 +32,6 @@ declare module Config {
 		AB_SERVER?: string;
 		AB_SERVER_PROTO?: string;
 		DEBUG?: boolean;
-		PROXY_HOSTNAME?: string;
-		USE_PROXY?: boolean;
-		PROXY_PORT?: number;
 		ON_PREM?: boolean;
 		CI_LOGGER?: boolean;
 		TYPESCRIPT_COMPILER_OPTIONS?: ITypeScriptCompilerOptions;

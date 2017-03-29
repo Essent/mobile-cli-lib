@@ -1,128 +1,75 @@
-import * as iOSProxyServices from "./ios-proxy-services";
-import * as path from "path";
-import * as ref from "ref";
-import * as util from "util";
+import { EOL } from "os";
 
 export class IOSDeviceFileSystem implements Mobile.IDeviceFileSystem {
-	constructor(private device: Mobile.IiOSDevice,
-		private devicePointer: NodeBuffer,
-		private $coreFoundation: Mobile.ICoreFoundation,
-		private $errors: IErrors,
-		private $fs: IFileSystem,
-		private $injector: IInjector,
+	private static AFC_DELETE_FILE_NOT_FOUND_ERROR = 8;
+
+	constructor(private device: Mobile.IDevice,
 		private $logger: ILogger,
-		private $mobileDevice: Mobile.IMobileDevice,
-		private $options: ICommonOptions) { }
+		private $iosDeviceOperations: IIOSDeviceOperations,
+		private $fs: IFileSystem) { }
 
-	public listFiles(devicePath: string, appIdentifier?: string): IFuture<any> {
-		return (() => {
-			if (!devicePath) {
-				devicePath = ".";
+	public async listFiles(devicePath: string, appIdentifier: string): Promise<void> {
+		if (!devicePath) {
+			devicePath = ".";
+		}
+
+		this.$logger.info("Listing %s", devicePath);
+
+		const deviceIdentifier = this.device.deviceInfo.identifier;
+		let children: string[] = [];
+		const result = await this.$iosDeviceOperations.listDirectory([{ deviceId: deviceIdentifier, path: devicePath, appId: appIdentifier }]);
+		children = result[deviceIdentifier][0].response;
+		this.$logger.out(children.join(EOL));
+	}
+
+	public async getFile(deviceFilePath: string, appIdentifier: string, outputFilePath?: string): Promise<void> {
+		if (!outputFilePath) {
+			const result = await this.$iosDeviceOperations.readFiles([{ deviceId: this.device.deviceInfo.identifier, path: deviceFilePath, appId: appIdentifier }]);
+			const response = result[this.device.deviceInfo.identifier][0];
+			if (response) {
+				this.$logger.out(response.response);
 			}
-
-			this.$logger.info("Listing %s", devicePath);
-
-			let afcClient = this.resolveAfc();
-
-			let walk = (root:string, indent:number) => {
-				this.$logger.info(util.format("%s %s", Array(indent).join(" "), root));
-				let children:string[] = [];
-				try {
-					children = afcClient.listDir(root);
-				} catch (e) {
-					children = [];
-				}
-
-				_.each(children, (child:string) => {
-					walk(root + "/" + child, indent + 1);
-				});
-			};
-
-			walk(devicePath, 0);
-		}).future<any>()();
+		} else {
+			await this.$iosDeviceOperations.downloadFiles([{ appId: appIdentifier, deviceId: this.device.deviceInfo.identifier, source: deviceFilePath, destination: outputFilePath }]);
+		}
 	}
 
-	public getFile(deviceFilePath: string): IFuture<void> {
-		return (() => {
-			let afcClient = this.resolveAfc();
-			let fileToRead = afcClient.open(deviceFilePath, "r");
-			let fileToWrite = this.$options.file ? this.$fs.createWriteStream(this.$options.file) : process.stdout;
-			let dataSizeToRead = 8192;
-			let size = 0;
+	public async putFile(localFilePath: string, deviceFilePath: string, appIdentifier: string): Promise<void> {
+		await this.uploadFilesCore([{ appId: appIdentifier, deviceId: this.device.deviceInfo.identifier, files: [{ source: localFilePath, destination: deviceFilePath }] }]);
+	}
 
-			while(true) {
-				let data = fileToRead.read(dataSizeToRead);
-				if(!data || data.length === 0) {
-					break;
-				}
-				fileToWrite.write(data);
-				size += data.length;
+	public async deleteFile(deviceFilePath: string, appIdentifier: string): Promise<void> {
+		await this.$iosDeviceOperations.deleteFiles([{ appId: appIdentifier, destination: deviceFilePath, deviceId: this.device.deviceInfo.identifier }], (err: IOSDeviceLib.IDeviceError) => {
+			this.$logger.trace(`Error while deleting file: ${deviceFilePath}: ${err.message} with code: ${err.code}`);
+
+			if (err.code !== IOSDeviceFileSystem.AFC_DELETE_FILE_NOT_FOUND_ERROR) {
+				this.$logger.warn(`Cannot delete file: ${deviceFilePath}. Reason: ${err.message}`);
 			}
-
-			fileToRead.close();
-			this.$logger.trace("%s bytes read from %s", size.toString(), deviceFilePath);
-
-		}).future<void>()();
+		});
 	}
 
-	public putFile(localFilePath: string, deviceFilePath: string): IFuture<void> {
-		let afcClient = this.resolveAfc();
-		return afcClient.transfer(path.resolve(localFilePath), deviceFilePath);
+	public async transferFiles(deviceAppData: Mobile.IDeviceAppData, localToDevicePaths: Mobile.ILocalToDevicePathData[]): Promise<void> {
+		const files: IOSDeviceLib.IFileData[] = _(localToDevicePaths)
+			.filter(l => this.$fs.getFsStats(l.getLocalPath()).isFile())
+			.map(l => ({ source: l.getLocalPath(), destination: l.getDevicePath() }))
+			.value();
+
+		await this.uploadFilesCore([{
+			deviceId: this.device.deviceInfo.identifier,
+			appId: deviceAppData.appIdentifier,
+			files: files
+		}]);
 	}
 
-	public deleteFile(deviceFilePath: string, appIdentifier: string): void {
-		let houseArrestClient: Mobile.IHouseArrestClient = this.$injector.resolve(iOSProxyServices.HouseArrestClient, {device: this.device});
-		let afcClient = this.getAfcClient(houseArrestClient, deviceFilePath, appIdentifier);
-		afcClient.deleteFile(deviceFilePath);
-		houseArrestClient.closeSocket();
-	}
-
-	public transferFiles(deviceAppData: Mobile.IDeviceAppData, localToDevicePaths: Mobile.ILocalToDevicePathData[]): IFuture<void> {
-		return (() => {
-			let houseArrestClient: Mobile.IHouseArrestClient = this.$injector.resolve(iOSProxyServices.HouseArrestClient, { device: this.device });
-
-			let afcClient = this.getAfcClient(houseArrestClient, deviceAppData.deviceProjectRootPath, deviceAppData.appIdentifier);
-			_.each(localToDevicePaths, (localToDevicePathData) => {
-				let stats = this.$fs.getFsStats(localToDevicePathData.getLocalPath()).wait();
-				if(stats.isFile()) {
-					afcClient.transfer(localToDevicePathData.getLocalPath(), localToDevicePathData.getDevicePath()).wait();
-				}
-			});
-			houseArrestClient.closeSocket();
-		}).future<void>()();
-	}
-
-	public transferDirectory(deviceAppData: Mobile.IDeviceAppData, localToDevicePaths: Mobile.ILocalToDevicePathData[], projectFilesPath: string): IFuture<void> {
+	public async transferDirectory(deviceAppData: Mobile.IDeviceAppData, localToDevicePaths: Mobile.ILocalToDevicePathData[], projectFilesPath: string): Promise<void> {
 		return this.transferFiles(deviceAppData, localToDevicePaths);
 	}
 
-	private getAfcClient(houseArrestClient: Mobile.IHouseArrestClient, rootPath: string, appIdentifier: string): Mobile.IAfcClient {
-		if (rootPath.indexOf("/Documents/") === 0) {
-			return houseArrestClient.getAfcClientForAppDocuments(appIdentifier);
-		}
-
-		return houseArrestClient.getAfcClientForAppContainer(appIdentifier);
-	}
-
-	private resolveAfc(): Mobile.IAfcClient {
-		let service = this.$options.app ? this.startHouseArrestService(this.$options.app) : this.device.startService(iOSProxyServices.MobileServices.APPLE_FILE_CONNECTION);
-		let afcClient:Mobile.IAfcClient = this.$injector.resolve(iOSProxyServices.AfcClient, {service: service});
-		return afcClient;
-	}
-
-	private startHouseArrestService(bundleId: string): number {
-		let func = () => {
-			let fdRef = ref.alloc("int");
-			let result = this.$mobileDevice.deviceStartHouseArrestService(this.devicePointer, this.$coreFoundation.createCFString(bundleId), null, fdRef);
-			let fd = fdRef.deref();
-
-			if(result !== 0) {
-				this.$errors.fail("AMDeviceStartHouseArrestService returned %s", result);
+	private async uploadFilesCore(filesToUpload: IOSDeviceLib.IUploadFilesData[]): Promise<void> {
+		await this.$iosDeviceOperations.uploadFiles(filesToUpload, (err: IOSDeviceLib.IDeviceError) => {
+			if (err.deviceId === this.device.deviceInfo.identifier) {
+				throw err;
 			}
-
-			return fd;
-		};
-
-		return this.device.tryExecuteFunction<number>(func);
+		});
 	}
 }

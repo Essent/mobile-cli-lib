@@ -1,5 +1,3 @@
-import Future = require("fibers/future");
-
 class IosEmulatorServices implements Mobile.IiOSSimulatorService {
 	constructor(private $logger: ILogger,
 		private $emulatorSettingsService: Mobile.IEmulatorSettingsService,
@@ -10,42 +8,48 @@ class IosEmulatorServices implements Mobile.IiOSSimulatorService {
 		private $options: ICommonOptions,
 		private $iOSSimResolver: Mobile.IiOSSimResolver) { }
 
-	public getEmulatorId(): IFuture<string> {
-		return Future.fromResult("");
+	public async getEmulatorId(): Promise<string> {
+		return "";
 	}
 
-	public checkDependencies(): IFuture<void> {
-		return Future.fromResult();
+	public async getRunningEmulatorId(image: string): Promise<string> {
+		//todo: plamen5kov: fix later if necessary
+		return "";
 	}
 
-	public checkAvailability(dependsOnProject: boolean = true): IFuture<void> {
-		return (() => {
-			if(!this.$hostInfo.isDarwin) {
-				this.$errors.failWithoutHelp("iOS Simulator is available only on Mac OS X.");
-			}
-
-			let platform = this.$devicePlatformsConstants.iOS;
-			if(dependsOnProject && !this.$emulatorSettingsService.canStart(platform).wait()) {
-				this.$errors.failWithoutHelp("The current project does not target iOS and cannot be run in the iOS Simulator.");
-			}
-		}).future<void>()();
+	public async checkDependencies(): Promise<void> {
+		return;
 	}
 
-	public startEmulator(): IFuture<string> {
-		return this.$iOSSimResolver.iOSSim.startSimulator();
+	public checkAvailability(dependsOnProject?: boolean): void {
+		dependsOnProject = dependsOnProject === undefined ? true : dependsOnProject;
+
+		if (!this.$hostInfo.isDarwin) {
+			this.$errors.failWithoutHelp("iOS Simulator is available only on Mac OS X.");
+		}
+
+		let platform = this.$devicePlatformsConstants.iOS;
+		if (dependsOnProject && !this.$emulatorSettingsService.canStart(platform)) {
+			this.$errors.failWithoutHelp("The current project does not target iOS and cannot be run in the iOS Simulator.");
+		}
 	}
 
-	public runApplicationOnEmulator(app: string, emulatorOptions?: Mobile.IEmulatorOptions): IFuture<any> {
-		return (() => {
-			return this.runApplicationOnEmulatorCore(app, emulatorOptions);
-		}).future<any>()();
+	public async startEmulator(emulatorImage?: string): Promise<string> {
+		return this.$iOSSimResolver.iOSSim.startSimulator({
+			id: emulatorImage,
+			state: "None"
+		});
 	}
 
-	public postDarwinNotification(notification: string): IFuture<void> {
+	public runApplicationOnEmulator(app: string, emulatorOptions?: Mobile.IEmulatorOptions): Promise<any> {
+		return this.runApplicationOnEmulatorCore(app, emulatorOptions);
+	}
+
+	public postDarwinNotification(notification: string): Promise<void> {
 		let iosSimPath = this.$iOSSimResolver.iOSSimPath;
 		let nodeCommandName = process.argv[0];
 
-		let opts = [ "notify-post", notification ];
+		let opts = ["notify-post", notification];
 
 		if (this.$options.device) {
 			opts.push("--device", this.$options.device);
@@ -54,13 +58,13 @@ class IosEmulatorServices implements Mobile.IiOSSimulatorService {
 		return this.$childProcess.exec(`${nodeCommandName} ${iosSimPath} ${opts.join(' ')}`);
 	}
 
-	private runApplicationOnEmulatorCore(app: string, emulatorOptions?: Mobile.IEmulatorOptions): any {
+	private async runApplicationOnEmulatorCore(app: string, emulatorOptions?: Mobile.IEmulatorOptions): Promise<any> {
 		this.$logger.info("Starting iOS Simulator");
 		let iosSimPath = this.$iOSSimResolver.iOSSimPath;
 		let nodeCommandName = process.argv[0];
 
-		if(this.$options.availableDevices) {
-			this.$childProcess.spawnFromEvent(nodeCommandName, [iosSimPath, "device-types"], "close", { stdio: "inherit" }).wait();
+		if (this.$options.availableDevices) {
+			await this.$childProcess.spawnFromEvent(nodeCommandName, [iosSimPath, "device-types"], "close", { stdio: "inherit" });
 			return;
 		}
 
@@ -73,18 +77,18 @@ class IosEmulatorServices implements Mobile.IiOSSimulatorService {
 			opts = opts.concat("--timeout", this.$options.timeout);
 		}
 
-		if(this.$options.sdk) {
+		if (this.$options.sdk) {
 			opts = opts.concat("--sdkVersion", this.$options.sdk);
 		}
 
-		if(!this.$options.justlaunch) {
+		if (!this.$options.justlaunch) {
 			opts.push("--logging");
 		} else {
-			if(emulatorOptions) {
-				if(emulatorOptions.stderrFilePath) {
+			if (emulatorOptions) {
+				if (emulatorOptions.stderrFilePath) {
 					opts = opts.concat("--stderr", emulatorOptions.stderrFilePath);
 				}
-				if(emulatorOptions.stdoutFilePath) {
+				if (emulatorOptions.stdoutFilePath) {
 					opts = opts.concat("--stdout", emulatorOptions.stdoutFilePath);
 				}
 			}
@@ -92,17 +96,17 @@ class IosEmulatorServices implements Mobile.IiOSSimulatorService {
 			opts.push("--exit");
 		}
 
-		if(this.$options.device) {
+		if (this.$options.device) {
 			opts = opts.concat("--device", this.$options.device);
 		} else if (emulatorOptions && emulatorOptions.deviceType) {
 			opts = opts.concat("--device", emulatorOptions.deviceType);
 		}
 
-		if(emulatorOptions && emulatorOptions.args) {
+		if (emulatorOptions && emulatorOptions.args) {
 			opts.push(`--args=${emulatorOptions.args}`);
 		}
 
-		if(emulatorOptions && emulatorOptions.waitForDebugger) {
+		if (emulatorOptions && emulatorOptions.waitForDebugger) {
 			opts.push("--waitForDebugger");
 		}
 

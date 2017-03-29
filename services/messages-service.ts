@@ -1,6 +1,5 @@
 import * as util from "util";
 import * as path from "path";
-import * as fiberBootstrap from "../fiber-bootstrap";
 
 export class MessagesService implements IMessagesService {
 	private _pathsToMessageJsonFiles: string[] = null;
@@ -36,13 +35,15 @@ export class MessagesService implements IMessagesService {
 	}
 
 	public getMessage(id: string, ...args: string[]): string {
+		const argsArray = args || [];
+
 		let keys = id.split("."),
-			result = this.getFormatedMessage(id, ...args);
+			result = this.getFormatedMessage.apply(this, [id].concat(argsArray));
 
 		_.each(this.messageJsonFilesContents, jsonFileContents => {
 			let messageValue = this.getMessageFromJsonRecursive(keys, jsonFileContents, 0);
 			if (messageValue) {
-				result = this.getFormatedMessage(messageValue, ...args);
+				result = this.getFormatedMessage.apply(this, [messageValue].concat(argsArray));
 				return false;
 			}
 		});
@@ -68,20 +69,18 @@ export class MessagesService implements IMessagesService {
 	}
 
 	private refreshMessageJsonContentsCache(): void {
-		fiberBootstrap.run(() => {
-			this._messageJsonFilesContentsCache = [];
-			_.each(this.pathsToMessageJsonFiles, path => {
-				if (!this.$fs.exists(path).wait()) {
-					throw new Error("Message json file " + path + " does not exist.");
-				}
+		this._messageJsonFilesContentsCache = [];
+		_.each(this.pathsToMessageJsonFiles, path => {
+			if (!this.$fs.exists(path)) {
+				throw new Error("Message json file " + path + " does not exist.");
+			}
 
-				this._messageJsonFilesContentsCache.push(this.$fs.readJson(path).wait());
-			});
+			this._messageJsonFilesContentsCache.push(this.$fs.readJson(path));
 		});
 	}
 
 	private getFormatedMessage(message: string, ...args: string[]): string {
-		return ~message.indexOf("%") ? util.format(message, ...args) : message;
+		return ~message.indexOf("%") ? util.format.apply(null, [message].concat(args || [])) : message;
 	}
 }
 

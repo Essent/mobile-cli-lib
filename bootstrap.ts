@@ -1,9 +1,5 @@
-global._ = require("lodash");
-global.$injector = require("./yok").injector;
-
-if (!global.Promise) {
-	global.Promise = require("bluebird");
-}
+(<ICliGlobal>global)._ = require("lodash");
+(<ICliGlobal>global).$injector = require("./yok").injector;
 
 require("colors");
 $injector.require("errors", "./errors");
@@ -26,6 +22,7 @@ $injector.require("messagesService", "./services/messages-service");
 
 $injector.require("cancellation", "./services/cancellation");
 $injector.require("hooksService", "./services/hooks-service");
+$injector.require("emulatorImageService", "./services/emulator-image-service");
 
 $injector.require("httpClient", "./http-client");
 $injector.require("childProcess", "./child-process");
@@ -45,9 +42,9 @@ $injector.requireCommand("autocomplete|enable", "./commands/autocompletion");
 $injector.requireCommand("autocomplete|disable", "./commands/autocompletion");
 $injector.requireCommand("autocomplete|status", "./commands/autocompletion");
 
-$injector.requireCommand("device|*list", "./commands/device/list-devices");
-$injector.requireCommand("device|android", "./commands/device/list-devices");
-$injector.requireCommand("device|ios", "./commands/device/list-devices");
+$injector.requireCommand(["device|*list", "devices|*list"], "./commands/device/list-devices");
+$injector.requireCommand(["device|android", "devices|android"], "./commands/device/list-devices");
+$injector.requireCommand(["device|ios", "devices|ios"], "./commands/device/list-devices");
 
 $injector.requireCommand("device|log", "./commands/device/device-log-stream");
 $injector.requireCommand("device|run", "./commands/device/run-application");
@@ -58,15 +55,7 @@ $injector.requireCommand("device|list-files", "./commands/device/list-files");
 $injector.requireCommand("device|get-file", "./commands/device/get-file");
 $injector.requireCommand("device|put-file", "./commands/device/put-file");
 
-$injector.require("iOSCore", "./mobile/ios/device/ios-core");
-$injector.require("coreFoundation", "./mobile/ios/device/ios-core");
-$injector.require("mobileDevice", "./mobile/ios/device/ios-core");
-$injector.require("plistService", "./mobile/ios/device/ios-core");
-
-$injector.require("installationProxyClient", "./mobile/ios/device/ios-proxy-services");
-$injector.require("notificationProxyClient", "./mobile/ios/device/ios-proxy-services");
-$injector.require("houseArrestClient", "./mobile/ios/device/ios-proxy-services");
-$injector.require("gdbServer", "./mobile/ios/device/ios-core");
+$injector.require("iosDeviceOperations", "./mobile/ios/device/ios-device-operations");
 
 $injector.require("deviceFound", "./mobile/mobile-core/device-discovery");
 $injector.require("deviceLost", "./mobile/mobile-core/device-discovery");
@@ -107,9 +96,15 @@ $injector.require("mobileHelper", "./mobile/mobile-helper");
 $injector.require("devicePlatformsConstants", "./mobile/device-platforms-constants");
 $injector.require("htmlHelpService", "./services/html-help-service");
 $injector.require("messageContractGenerator", "./services/message-contract-generator");
+$injector.require("proxyService", "./services/proxy-service");
+$injector.require("credentialsService", "./services/credentials-service");
 $injector.requireCommand("dev-preuninstall", "./commands/preuninstall");
 $injector.requireCommand("dev-generate-messages", "./commands/generate-messages");
 $injector.requireCommand("doctor", "./commands/doctor");
+
+$injector.requireCommand("proxy|*get", "./commands/proxy/proxy-get-command");
+$injector.requireCommand("proxy|set", "./commands/proxy/proxy-set-command");
+$injector.requireCommand("proxy|clear", "./commands/proxy/proxy-clear-command");
 
 $injector.require("utils", "./utils");
 $injector.require("bplistParser", "./bplist-parser");

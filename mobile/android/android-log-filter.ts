@@ -1,3 +1,5 @@
+let os = require("os");
+
 export class AndroidLogFilter implements Mobile.IPlatformLogFilter {
 
 	//sample line is "I/Web Console(    4438): Received Event: deviceready at file:///storage/emulated/0/Icenium/com.telerik.TestApp/js/index.js:48"
@@ -7,24 +9,24 @@ export class AndroidLogFilter implements Mobile.IPlatformLogFilter {
 	// or '12-28 10:45:08.020  3329  3329 W chromium: [WARNING:data_reduction_proxy_settings.cc(328)] SPDY proxy OFF at startup'
 	private static API_LEVEL_23_LINE_REGEX = /.+?\s+?(?:[A-Z]\s+?)([A-Za-z ]+?)\s*?\: (.*)/;
 
-	constructor(private $loggingLevels: Mobile.ILoggingLevels) {}
+	constructor(private $loggingLevels: Mobile.ILoggingLevels) { }
 
 	public filterData(data: string, logLevel: string): string {
 		let specifiedLogLevel = (logLevel || '').toUpperCase();
-		if(specifiedLogLevel === this.$loggingLevels.info) {
+		if (specifiedLogLevel === this.$loggingLevels.info) {
 			let log = this.getConsoleLogFromLine(data);
-			if(log) {
-				if(log.tag) {
-					return `${log.tag}: ${log.message}`;
+			if (log) {
+				if (log.tag) {
+					return `${log.tag}: ${log.message}` + os.EOL;
 				} else {
-					return log.message;
+					return log.message + os.EOL;
 				}
 			}
 
 			return null;
 		}
 
-		return data;
+		return data + os.EOL;
 	}
 
 	private getConsoleLogFromLine(lineText: string): any {
